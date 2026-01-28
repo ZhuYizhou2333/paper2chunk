@@ -1,8 +1,16 @@
 """LLM-based rewriter for semantic enhancement"""
 
 from typing import Optional, List
-import openai
-from anthropic import Anthropic
+try:
+    import openai
+except ImportError:
+    openai = None
+
+try:
+    from anthropic import Anthropic
+except ImportError:
+    Anthropic = None
+
 from paper2chunk.config import LLMConfig
 from paper2chunk.models import Chunk
 
@@ -14,11 +22,15 @@ class LLMRewriter:
         self.config = config
         
         if config.provider == "openai":
+            if openai is None:
+                raise ImportError("openai package is required. Install with: pip install openai")
             if not config.openai_api_key:
                 raise ValueError("OpenAI API key is required when using OpenAI provider")
             openai.api_key = config.openai_api_key
             self.client = openai.OpenAI(api_key=config.openai_api_key)
         elif config.provider == "anthropic":
+            if Anthropic is None:
+                raise ImportError("anthropic package is required. Install with: pip install anthropic")
             if not config.anthropic_api_key:
                 raise ValueError("Anthropic API key is required when using Anthropic provider")
             self.client = Anthropic(api_key=config.anthropic_api_key)
