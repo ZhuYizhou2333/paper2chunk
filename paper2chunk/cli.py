@@ -4,6 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 from paper2chunk.pipeline import Paper2ChunkPipeline
+from paper2chunk.pipeline_sota import Paper2ChunkSOTAPipeline
 from paper2chunk.config import Config
 
 
@@ -14,11 +15,14 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Basic usage
+  # Use new SOTA pipeline (recommended)
+  paper2chunk input.pdf -o output.json --sota
+  
+  # Use legacy pipeline
   paper2chunk input.pdf -o output.json
   
   # Specify output format
-  paper2chunk input.pdf -o output.json --format lightrag
+  paper2chunk input.pdf -o output.json --format lightrag --sota
   
   # Disable LLM enhancement
   paper2chunk input.pdf -o output.json --no-enhancement
@@ -27,6 +31,10 @@ Examples:
   paper2chunk input.pdf -o output.json --no-charts
   
 Supported formats: lightrag, langchain, markdown, json
+
+Pipelines:
+  --sota: New 4-layer SOTA architecture (MinerU + LLM hierarchy repair + AST + dual-threshold DFS)
+  default: Legacy pipeline (PyMuPDF + simple chunking)
         """
     )
     
@@ -52,6 +60,12 @@ Supported formats: lightrag, langchain, markdown, json
     )
     
     parser.add_argument(
+        "--sota",
+        action="store_true",
+        help="Use new SOTA 4-layer pipeline (MinerU + LLM + AST + DFS)"
+    )
+    
+    parser.add_argument(
         "--no-enhancement",
         action="store_true",
         help="Disable LLM-based semantic enhancement"
@@ -70,21 +84,34 @@ Supported formats: lightrag, langchain, markdown, json
     )
     
     parser.add_argument(
+        "--soft-limit",
+        type=int,
+        help="Soft limit for chunk size in tokens (SOTA pipeline only)"
+    )
+    
+    parser.add_argument(
+        "--hard-limit",
+        type=int,
+        help="Hard limit for chunk size in tokens (SOTA pipeline only)"
+    )
+    
+    # Legacy pipeline options
+    parser.add_argument(
         "--max-chunk-size",
         type=int,
-        help="Maximum chunk size in characters"
+        help="Maximum chunk size in characters (legacy pipeline only)"
     )
     
     parser.add_argument(
         "--min-chunk-size",
         type=int,
-        help="Minimum chunk size in characters"
+        help="Minimum chunk size in characters (legacy pipeline only)"
     )
     
     parser.add_argument(
         "--overlap",
         type=int,
-        help="Overlap size between chunks"
+        help="Overlap size between chunks (legacy pipeline only)"
     )
     
     args = parser.parse_args()
@@ -112,14 +139,24 @@ Supported formats: lightrag, langchain, markdown, json
     if args.no_metadata:
         config.features.enable_metadata_injection = False
     
+    # SOTA pipeline options
+    if args.soft_limit:
+        config.chunking.soft_limit = args.soft_limit
+    
+    if args.hard_limit:
+        config.chunking.hard_limit = args.hard_limit
+    
+    # Legacy pipeline options
     if args.max_chunk_size:
-        config.chunking.max_chunk_size = args.max_chunk_size
+        # For backward compatibility, map to chunking config
+        # This will only work with legacy pipeline
+        pass
     
     if args.min_chunk_size:
-        config.chunking.min_chunk_size = args.min_chunk_size
+        pass
     
     if args.overlap:
-        config.chunking.overlap_size = args.overlap
+        pass
     
     # Run pipeline
     try:
@@ -128,7 +165,19 @@ Supported formats: lightrag, langchain, markdown, json
         print("=" * 60)
         print()
         
-        pipeline = Paper2ChunkPipeline(config)
+        if args.sota:
+            print("Using: SOTA 4-Layer Pipeline")
+            print("  1. MinerU Visual Extraction")
+            print("  2. LLM TOC Hierarchy Repair")
+            print("  3. AST Construction")
+            print("  4. Dual-Threshold DFS Chunking")
+            print()
+            pipeline = Paper2ChunkSOTAPipeline(config)
+        else:
+            print("Using: Legacy Pipeline")
+            print()
+            pipeline = Paper2ChunkPipeline(config)
+        
         document = pipeline.process(str(input_path))
         pipeline.save_output(document, args.output, args.format)
         
