@@ -165,13 +165,42 @@ JSON:"""
             
             return skeleton
             
-        except Exception as e:
-            print(f"  Warning: LLM hierarchy repair failed: {e}")
+        except json.JSONDecodeError as e:
+            print(f"  Warning: Failed to parse LLM response as JSON: {e}")
             print("  Using original levels as fallback")
-            # Fallback: use original levels or default to 1
             for item in skeleton:
-                item['corrected_level'] = item.get('original_level', 1)
+                item['corrected_level'] = item.get('original_level') or self._infer_level(item['text'])
             return skeleton
+        except Exception as e:
+            print(f"  Warning: LLM hierarchy repair failed: {type(e).__name__}: {e}")
+            print("  Using original levels as fallback")
+            for item in skeleton:
+                item['corrected_level'] = item.get('original_level') or self._infer_level(item['text'])
+            return skeleton
+    
+    def _infer_level(self, text: str) -> int:
+        """Infer header level from text patterns
+        
+        Args:
+            text: Header text
+            
+        Returns:
+            Inferred level (1-4)
+        """
+        import re
+        
+        # Pattern matching for common heading formats
+        if re.match(r'^(Chapter|第[一二三四五六七八九十\d]+章)', text, re.IGNORECASE):
+            return 1
+        elif re.match(r'^\d+\.\s', text):  # "1. Introduction"
+            return 2
+        elif re.match(r'^\d+\.\d+\s', text):  # "1.1 Background"
+            return 3
+        elif re.match(r'^\d+\.\d+\.\d+\s', text):  # "1.1.1 Details"
+            return 4
+        else:
+            # Default to level 2 for unrecognized patterns
+            return 2
     
     def _write_back_levels(
         self,

@@ -95,23 +95,23 @@ Pipelines:
         help="Hard limit for chunk size in tokens (SOTA pipeline only)"
     )
     
-    # Legacy pipeline options
+    # Legacy pipeline options (deprecated - use SOTA pipeline instead)
     parser.add_argument(
         "--max-chunk-size",
         type=int,
-        help="Maximum chunk size in characters (legacy pipeline only)"
+        help="[DEPRECATED] Use --soft-limit with --sota instead"
     )
     
     parser.add_argument(
         "--min-chunk-size",
         type=int,
-        help="Minimum chunk size in characters (legacy pipeline only)"
+        help="[DEPRECATED] Legacy pipeline option only"
     )
     
     parser.add_argument(
         "--overlap",
         type=int,
-        help="Overlap size between chunks (legacy pipeline only)"
+        help="[DEPRECATED] Legacy pipeline option only"
     )
     
     args = parser.parse_args()
@@ -146,17 +146,11 @@ Pipelines:
     if args.hard_limit:
         config.chunking.hard_limit = args.hard_limit
     
-    # Legacy pipeline options
-    if args.max_chunk_size:
-        # For backward compatibility, map to chunking config
-        # This will only work with legacy pipeline
-        pass
-    
-    if args.min_chunk_size:
-        pass
-    
-    if args.overlap:
-        pass
+    # Legacy pipeline options - warn if used with SOTA
+    if args.sota and (args.max_chunk_size or args.min_chunk_size or args.overlap):
+        print("Warning: --max-chunk-size, --min-chunk-size, and --overlap are deprecated with --sota")
+        print("         Use --soft-limit and --hard-limit instead")
+        print()
     
     # Run pipeline
     try:

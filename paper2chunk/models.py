@@ -27,9 +27,17 @@ class TreeNode(BaseModel):
     children: List["TreeNode"] = Field(default_factory=list, description="Child nodes")
     
     def get_total_tokens(self) -> int:
-        """Estimate total tokens in this node and its children"""
-        # Rough estimation: 1 token ≈ 4 characters
-        token_count = len(self.content) // 4
+        """Estimate total tokens in this node and its children using tiktoken"""
+        try:
+            import tiktoken
+            # Use cl100k_base encoding (GPT-4, GPT-3.5-turbo)
+            enc = tiktoken.get_encoding("cl100k_base")
+            token_count = len(enc.encode(self.content))
+        except (ImportError, Exception):
+            # Fallback to rough estimation if tiktoken not available
+            # 1 token ≈ 4 characters (conservative estimate)
+            token_count = len(self.content) // 4
+        
         for child in self.children:
             token_count += child.get_total_tokens()
         return token_count

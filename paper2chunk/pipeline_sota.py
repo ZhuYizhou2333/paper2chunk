@@ -35,8 +35,25 @@ class Paper2ChunkSOTAPipeline:
         
         Args:
             config: Configuration object. If None, loads from environment.
+            
+        Raises:
+            ValueError: If required configuration is missing
         """
         self.config = config or Config.from_env()
+        
+        # Validate required configuration for SOTA pipeline
+        if not self.config.mineru.api_key:
+            raise ValueError(
+                "MinerU API key is required for SOTA pipeline.\n"
+                "Please set MINERU_API_KEY in your .env file or environment.\n"
+                "Get your API key from: https://mineru.cn/"
+            )
+        
+        if not (self.config.llm.openai_api_key or self.config.llm.anthropic_api_key):
+            raise ValueError(
+                "LLM API key is required for SOTA pipeline.\n"
+                "Please set OPENAI_API_KEY or ANTHROPIC_API_KEY in your .env file."
+            )
         
         # Initialize components
         try:
@@ -145,7 +162,9 @@ class Paper2ChunkSOTAPipeline:
         print(f"✅ Processing Complete!")
         print(f"{'='*60}")
         print(f"Generated {len(chunks)} semantic chunks")
-        print(f"Average chunk size: {sum(len(c.content) for c in chunks) // len(chunks) if chunks else 0} characters")
+        if chunks:
+            avg_size = sum(len(c.content) for c in chunks) // len(chunks)
+            print(f"Average chunk size: {avg_size} characters")
         print(f"{'='*60}\n")
         
         return document

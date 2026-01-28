@@ -14,6 +14,20 @@ from paper2chunk.config import Config
 def main():
     """Run SOTA pipeline example"""
     
+    # Check if example PDF exists
+    import os
+    pdf_path = "example.pdf"  # Replace with your PDF path
+    
+    if not os.path.exists(pdf_path):
+        print(f"❌ Error: PDF file not found: {pdf_path}")
+        print("\nTo run this example:")
+        print("1. Set MINERU_API_KEY in .env file (get from https://mineru.cn/)")
+        print("2. Set OPENAI_API_KEY or ANTHROPIC_API_KEY in .env file")
+        print("3. Replace 'example.pdf' with path to your PDF file")
+        print("\nExample:")
+        print("  python sota_pipeline_example.py")
+        return
+    
     # Load configuration from environment
     config = Config.from_env()
     
@@ -23,14 +37,9 @@ def main():
     config.features.enable_semantic_enhancement = True
     config.features.enable_metadata_injection = True
     
-    # Initialize SOTA pipeline
-    pipeline = Paper2ChunkSOTAPipeline(config)
-    
-    # Process a PDF file
-    # Note: This requires a valid MinerU API key and PDF file
-    pdf_path = "example.pdf"  # Replace with your PDF path
-    
     try:
+        # Initialize SOTA pipeline (will validate API keys)
+        pipeline = Paper2ChunkSOTAPipeline(config)
         print("Starting SOTA pipeline processing...")
         print()
         
@@ -56,12 +65,8 @@ def main():
         
         print("\n✅ Example completed successfully!")
         
-    except FileNotFoundError:
-        print(f"❌ Error: PDF file not found: {pdf_path}")
-        print("\nTo run this example:")
-        print("1. Set MINERU_API_KEY in .env file")
-        print("2. Set OPENAI_API_KEY or ANTHROPIC_API_KEY in .env file")
-        print("3. Replace 'example.pdf' with path to your PDF file")
+    except ValueError as e:
+        print(f"❌ Configuration Error: {e}")
     except Exception as e:
         print(f"❌ Error: {e}")
         import traceback

@@ -74,7 +74,21 @@ class MinerUParser:
             
         Returns:
             Parsed JSON result from MinerU
+            
+        Raises:
+            ValueError: If PDF file is too large
+            RuntimeError: If API call fails
         """
+        # Check file size (limit to 50MB)
+        file_size = Path(pdf_path).stat().st_size
+        max_size = 50 * 1024 * 1024  # 50MB
+        
+        if file_size > max_size:
+            raise ValueError(
+                f"PDF file too large: {file_size / (1024*1024):.1f}MB. "
+                f"Maximum supported size: {max_size / (1024*1024):.0f}MB"
+            )
+        
         # Read PDF file
         with open(pdf_path, 'rb') as f:
             pdf_bytes = f.read()
@@ -98,8 +112,17 @@ class MinerUParser:
             result = response.json()
             return result
             
+        except requests.exceptions.HTTPError as e:
+            raise RuntimeError(
+                f"MinerU API call failed for '{pdf_path}': "
+                f"HTTP {e.response.status_code} - {e.response.text[:200]}"
+            )
+        except requests.exceptions.Timeout:
+            raise RuntimeError(
+                f"MinerU API call timed out for '{pdf_path}' after {self.config.timeout}s"
+            )
         except requests.exceptions.RequestException as e:
-            raise RuntimeError(f"MinerU API call failed: {e}")
+            raise RuntimeError(f"MinerU API call failed for '{pdf_path}': {e}")
     
     def _extract_metadata(self, parsed_result: Dict[str, Any], pdf_path: str) -> DocumentMetadata:
         """Extract document metadata from MinerU result

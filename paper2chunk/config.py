@@ -53,7 +53,7 @@ class Config(BaseModel):
         mineru_config = MinerUConfig(
             api_key=os.getenv("MINERU_API_KEY"),
             api_url=os.getenv("MINERU_API_URL", "https://api.mineru.cn/v1/parse"),
-            timeout=int(os.getenv("MINERU_TIMEOUT", "300")),
+            timeout=cls._parse_int_env("MINERU_TIMEOUT", 300),
         )
         
         llm_config = LLMConfig(
@@ -65,8 +65,8 @@ class Config(BaseModel):
         )
         
         chunking_config = ChunkingConfig(
-            soft_limit=int(os.getenv("CHUNK_SOFT_LIMIT", "800")),
-            hard_limit=int(os.getenv("CHUNK_HARD_LIMIT", "2000")),
+            soft_limit=cls._parse_int_env("CHUNK_SOFT_LIMIT", 800),
+            hard_limit=cls._parse_int_env("CHUNK_HARD_LIMIT", 2000),
         )
         
         features_config = FeatureConfig(
@@ -80,3 +80,24 @@ class Config(BaseModel):
             chunking=chunking_config,
             features=features_config,
         )
+    
+    @staticmethod
+    def _parse_int_env(key: str, default: int) -> int:
+        """Parse integer from environment variable with error handling
+        
+        Args:
+            key: Environment variable key
+            default: Default value if not set or invalid
+            
+        Returns:
+            Parsed integer value
+        """
+        value = os.getenv(key)
+        if value is None:
+            return default
+        
+        try:
+            return int(value)
+        except ValueError:
+            print(f"Warning: Invalid integer value for {key}='{value}', using default {default}")
+            return default

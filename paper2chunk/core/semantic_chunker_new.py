@@ -6,6 +6,24 @@ from paper2chunk.models import TreeNode, Chunk, ChunkMetadata
 from paper2chunk.config import ChunkingConfig, LLMConfig
 
 
+def count_tokens(text: str) -> int:
+    """Count tokens in text using tiktoken
+    
+    Args:
+        text: Text to count tokens in
+        
+    Returns:
+        Number of tokens
+    """
+    try:
+        import tiktoken
+        enc = tiktoken.get_encoding("cl100k_base")
+        return len(enc.encode(text))
+    except (ImportError, Exception):
+        # Fallback to rough estimation
+        return len(text) // 4
+
+
 class DualThresholdChunker:
     """Chunk documents using dual-threshold recursive DFS
     
@@ -157,7 +175,8 @@ class DualThresholdChunker:
                 
                 # If accumulated content reaches soft limit, create chunk
                 accumulated_text = '\n\n'.join(accumulated_content)
-                if len(accumulated_text) // 4 >= self.config.soft_limit:
+                accumulated_tokens = count_tokens(accumulated_text)
+                if accumulated_tokens >= self.config.soft_limit:
                     self._create_chunk(
                         accumulated_text,
                         section_hierarchy,
@@ -270,15 +289,16 @@ class DualThresholdChunker:
             return self._simple_split(content, section_hierarchy, page_numbers)
         
         try:
-            prompt = f"""The following text is too long ({len(content)//4} tokens) and needs to be split into smaller semantic chunks.
+            prompt = f"""The following text is too long ({count_tokens(content)} tokens) and needs to be split into smaller semantic chunks.
 
 Please split it into 2-3 smaller chunks at natural semantic boundaries (e.g., paragraph breaks, topic changes).
+The target size per chunk should be around {self.config.soft_limit} tokens.
+
+Return the split points as character indices in a JSON array. For example: [0, 500, 1000, 1500]
+The indices should be in ascending order and cover the entire text length ({len(content)} characters).
 
 Text:
 {content[:4000]}...
-
-Return the split points as a JSON array of indices:
-[0, 500, 1000]
 
 JSON:"""
             
@@ -312,6 +332,20 @@ JSON:"""
                 result_text = result_text.split('```')[1].split('```')[0].strip()
             
             split_points = json.loads(result_text)
+            
+            # Validate split points
+            if not isinstance(split_points, list) or len(split_points) < 2:
+                raise ValueError("Invalid split points: need at least 2 points")
+            
+            # Ensure points are in ascending order and within bounds
+            split_points = sorted(split_points)
+            split_points = [max(0, min(p, len(content))) for p in split_points]
+            
+            # Ensure we have start and end
+            if split_points[0] != 0:
+                split_points.insert(0, 0)
+            if split_points[-1] != len(content):
+                split_points.append(len(content))
             
             # Create sub-chunks
             chunks = []
