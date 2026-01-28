@@ -140,10 +140,10 @@ paper2chunk input.pdf -o output.json --max-chunk-size 1500 --overlap 100
 
 #### 默认管道
 ```python
-from paper2chunk import Paper2ChunkSOTAPipeline
+from paper2chunk import Paper2ChunkPipeline
 
 # 初始化 默认管道
-pipeline = Paper2ChunkSOTAPipeline()
+pipeline = Paper2ChunkPipeline()
 
 # 处理 PDF
 document = pipeline.process("example.pdf")
@@ -176,7 +176,7 @@ pipeline.save_output(document, "output.json", format="lightrag")
 ### 自定义配置
 
 ```python
-from paper2chunk import Paper2ChunkSOTAPipeline
+from paper2chunk import Paper2ChunkPipeline
 from paper2chunk.config import Config
 
 # 加载并自定义配置
@@ -186,7 +186,7 @@ config.chunking.hard_limit = 2500  # 调整硬限制
 config.features.enable_chart_to_text = False
 
 # 使用自定义配置
-pipeline = Paper2ChunkSOTAPipeline(config)
+pipeline = Paper2ChunkPipeline(config)
 document = pipeline.process("example.pdf")
 ```
 

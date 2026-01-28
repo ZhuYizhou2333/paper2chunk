@@ -51,7 +51,7 @@ class Paper2ChunkPipeline:
         
         if not (self.config.llm.openai_api_key or self.config.llm.anthropic_api_key):
             raise ValueError(
-                "LLM API key is required for SOTA pipeline.\n"
+                "LLM API key is required for the pipeline.\n"
                 "Please set OPENAI_API_KEY or ANTHROPIC_API_KEY in your .env file."
             )
         
