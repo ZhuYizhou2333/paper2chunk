@@ -67,7 +67,7 @@ class MinerUParser:
         return document
     
     def _call_mineru_api(self, pdf_path: str) -> Dict[str, Any]:
-        """Call MinerU API to parse PDF
+        """Call MinerU API to parse PDF using batch upload API
         
         Args:
             pdf_path: Path to PDF file
@@ -89,28 +89,56 @@ class MinerUParser:
                 f"Maximum supported size: {max_size / (1024*1024):.0f}MB"
             )
         
-        # Read PDF file
-        with open(pdf_path, 'rb') as f:
-            pdf_bytes = f.read()
+        pdf_filename = Path(pdf_path).name
         
-        # Prepare request
+        # Step 1: Request upload URL from batch API
+        batch_url = "https://mineru.net/api/v4/file-urls/batch"
         headers = {
-            'Authorization': f'Bearer {self.config.api_key}',
-            'Content-Type': 'application/pdf',
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self.config.api_key}'
+        }
+        
+        data = {
+            "files": [
+                {"name": pdf_filename, "data_id": Path(pdf_path).stem}
+            ],
+            "model_version": "vlm"
         }
         
         try:
-            # Call API
-            response = requests.post(
-                self.config.api_url,
-                headers=headers,
-                data=pdf_bytes,
-                timeout=self.config.timeout
-            )
+            # Request upload URL
+            response = requests.post(batch_url, headers=headers, json=data, timeout=30)
             response.raise_for_status()
             
             result = response.json()
-            return result
+            if result.get("code") != 0:
+                raise RuntimeError(f"Failed to get upload URL: {result.get('msg', 'Unknown error')}")
+            
+            batch_id = result["data"]["batch_id"]
+            upload_urls = result["data"]["file_urls"]
+            
+            if not upload_urls:
+                raise RuntimeError("No upload URL returned from MinerU API")
+            
+            upload_url = upload_urls[0]
+            print(f"  → Got upload URL (batch_id: {batch_id})")
+            
+            # Step 2: Upload PDF file to the provided URL
+            with open(pdf_path, 'rb') as f:
+                upload_response = requests.put(upload_url, data=f, timeout=self.config.timeout)
+                upload_response.raise_for_status()
+            
+            print(f"  → PDF uploaded successfully")
+            
+            # Step 3: Poll for parsing results
+            # MinerU automatically submits parsing task after upload
+            parsed_result = self._poll_parsing_result(
+                batch_id, 
+                max_attempts=self.config.max_poll_attempts,
+                interval=self.config.poll_interval
+            )
+            
+            return parsed_result
             
         except requests.exceptions.HTTPError as e:
             raise RuntimeError(
@@ -123,6 +151,82 @@ class MinerUParser:
             )
         except requests.exceptions.RequestException as e:
             raise RuntimeError(f"MinerU API call failed for '{pdf_path}': {e}")
+    
+    def _poll_parsing_result(self, batch_id: str, max_attempts: int = 60, interval: int = 5) -> Dict[str, Any]:
+        """Poll for parsing result from MinerU
+        
+        Args:
+            batch_id: Batch ID from upload request
+            max_attempts: Maximum number of polling attempts (default: 60, total 5 minutes)
+            interval: Interval between polls in seconds (default: 5)
+            
+        Returns:
+            Parsed result
+            
+        Raises:
+            RuntimeError: If polling fails or times out
+        """
+        import time
+        
+        result_url = f"https://mineru.net/api/v4/batches/{batch_id}"
+        headers = {
+            'Authorization': f'Bearer {self.config.api_key}'
+        }
+        
+        print(f"  → Polling for parsing results...")
+        
+        for attempt in range(max_attempts):
+            try:
+                response = requests.get(result_url, headers=headers, timeout=30)
+                response.raise_for_status()
+                
+                result = response.json()
+                
+                if result.get("code") != 0:
+                    raise RuntimeError(f"Failed to get parsing result: {result.get('msg', 'Unknown error')}")
+                
+                batch_data = result.get("data", {})
+                status = batch_data.get("status")
+                
+                if status == "completed":
+                    print(f"  ✓ Parsing completed after {(attempt + 1) * interval}s")
+                    # Extract the parsed data
+                    files = batch_data.get("files", [])
+                    if files:
+                        file_data = files[0]
+                        # Get the actual parsing result
+                        if "result" in file_data:
+                            return file_data["result"]
+                        elif "result_url" in file_data:
+                            # Download result from URL
+                            result_response = requests.get(file_data["result_url"], timeout=30)
+                            result_response.raise_for_status()
+                            return result_response.json()
+                    return batch_data
+                    
+                elif status == "failed":
+                    error_msg = batch_data.get("error", "Unknown error")
+                    raise RuntimeError(f"Parsing failed: {error_msg}")
+                
+                elif status in ["pending", "processing"]:
+                    # Still processing, wait and retry
+                    if attempt < max_attempts - 1:
+                        time.sleep(interval)
+                        continue
+                    else:
+                        raise RuntimeError(f"Parsing timeout after {max_attempts * interval}s")
+                
+                else:
+                    raise RuntimeError(f"Unknown status: {status}")
+                    
+            except requests.exceptions.RequestException as e:
+                if attempt < max_attempts - 1:
+                    time.sleep(interval)
+                    continue
+                else:
+                    raise RuntimeError(f"Failed to poll parsing result: {e}")
+        
+        raise RuntimeError(f"Parsing timeout after {max_attempts * interval}s")
     
     def _extract_metadata(self, parsed_result: Dict[str, Any], pdf_path: str) -> DocumentMetadata:
         """Extract document metadata from MinerU result

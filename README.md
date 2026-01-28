@@ -83,8 +83,11 @@ cp .env.example .env
 **必需配置（SOTA 管道）：**
 ```bash
 # MinerU API 配置（Magic-PDF）
+# 获取 API 密钥: https://mineru.net/
 MINERU_API_KEY=your_mineru_api_key_here
-MINERU_API_URL=https://api.mineru.cn/v1/parse
+MINERU_TIMEOUT=300                  # 文件上传超时（秒）
+MINERU_POLL_INTERVAL=5              # 轮询间隔（秒）
+MINERU_MAX_POLL_ATTEMPTS=60         # 最大轮询次数（总等待时间 = 间隔 × 次数）
 
 # OpenAI 配置（推荐使用 GPT-4o）
 OPENAI_API_KEY=your_openai_api_key_here

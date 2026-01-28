@@ -17,9 +17,16 @@
 
 **关键特性**:
 - PDF 文件大小限制：50MB
+- 批量上传 API：使用 MinerU v4 批量上传接口
 - 超时设置：可配置（默认 300 秒）
+- 异步处理：上传后自动提交解析任务，轮询获取结果
 - 详细错误信息：包含文件名、HTTP 状态码等
 - API 密钥验证：初始化时检查
+
+**API 流程**:
+1. 申请上传链接：调用 `https://mineru.net/api/v4/file-urls/batch`
+2. 上传 PDF 文件：使用 PUT 请求上传到返回的 URL
+3. 轮询结果：系统自动提交解析任务，轮询 batch 状态获取结果
 
 **数据模型**:
 ```python
@@ -227,9 +234,9 @@ for chunk in document.chunks:
 ### 必需配置
 
 ```bash
-# MinerU API
+# MinerU API (批量上传接口)
+# 获取密钥: https://mineru.net/
 MINERU_API_KEY=your_key_here
-MINERU_API_URL=https://api.mineru.cn/v1/parse
 
 # LLM (选择一个)
 OPENAI_API_KEY=your_key_here
@@ -247,6 +254,11 @@ LLM_PROVIDER=openai  # 或 anthropic
 # 分片参数（token 数）
 CHUNK_SOFT_LIMIT=800
 CHUNK_HARD_LIMIT=2000
+
+# MinerU API 高级配置
+MINERU_TIMEOUT=300              # 上传超时（秒）
+MINERU_POLL_INTERVAL=5          # 轮询间隔（秒）
+MINERU_MAX_POLL_ATTEMPTS=60     # 最大轮询次数
 
 # 功能开关
 ENABLE_SEMANTIC_ENHANCEMENT=true
