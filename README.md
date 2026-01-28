@@ -63,14 +63,19 @@ paper2chunk 是一个专为 RAG（检索增强生成）系统设计的 PDF 文�
 
 ## 📦 安装
 
-### 使用 pip 安装
+### 使用 uv 安装（推荐）
+
+本项目使用 `uv` 管理虚拟环境与依赖（默认使用 `.venv/`）。
+
 ```bash
-pip install -e .
+uv venv
+uv sync
 ```
 
-### 安装依赖
+之后可以直接通过 `uv run` 运行命令：
+
 ```bash
-pip install -r requirements.txt
+uv run paper2chunk input.pdf -o output.json
 ```
 
 ### 环境配置
@@ -112,28 +117,28 @@ CHUNK_HARD_LIMIT=2000
 #### 使用新 默认管道（推荐）
 ```bash
 # 基本用法
-paper2chunk input.pdf -o output.json 
+uv run paper2chunk input.pdf -o output.json 
 
 # 指定输出格式
-paper2chunk input.pdf -o output.json --format lightrag 
+uv run paper2chunk input.pdf -o output.json --format lightrag 
 
 # 输出为 Markdown
-paper2chunk input.pdf -o output.md --format markdown 
+uv run paper2chunk input.pdf -o output.md --format markdown 
 
 # 禁用 LLM 增强（更快，但语义丰富度降低）
-paper2chunk input.pdf -o output.json --no-enhancement 
+uv run paper2chunk input.pdf -o output.json --no-enhancement 
 
 # 自定义分片参数
-paper2chunk input.pdf -o output.json --soft-limit 1000 --hard-limit 2500 
+uv run paper2chunk input.pdf -o output.json --soft-limit 1000 --hard-limit 2500 
 ```
 
 #### 使用传统管道（--legacy）（向后兼容）
 ```bash
 # 基本用法（使用 PyMuPDF）
-paper2chunk input.pdf -o output.json
+uv run paper2chunk input.pdf -o output.json --legacy
 
 # 自定义参数
-paper2chunk input.pdf -o output.json --max-chunk-size 1500 --overlap 100
+uv run paper2chunk input.pdf -o output.json --legacy --max-chunk-size 1500 --overlap 100
 ```
 
 ### Python API 使用
@@ -303,6 +308,12 @@ RAG-ready Chunks
 ## 🤝 贡献
 
 欢迎贡献代码、报告问题或提出新功能建议！
+
+## 📚 更多文档
+
+- 架构说明：`docs/ARCHITECTURE.md`
+- API 参考：`docs/API.md`
+- 贡献指南：`CONTRIBUTING.md`
 
 ## 📄 许可证
 

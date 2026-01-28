@@ -1,25 +1,38 @@
-# paper2chunk API Documentation
+# paper2chunk API 参考
 
-## Core Classes
+本文档提供 `paper2chunk` 的核心类、配置与命令行参数的快速参考。更完整的架构说明见 `docs/ARCHITECTURE.md`。
 
-### Paper2ChunkPipeline
+## 核心入口
 
-Main pipeline for processing PDF documents.
+### `Paper2ChunkPipeline`（默认管道：4 层架构）
 
 ```python
 from paper2chunk import Paper2ChunkPipeline
 
-pipeline = Paper2ChunkPipeline(config=None)
+pipeline = Paper2ChunkPipeline()  # 默认从环境变量/.env 加载配置
+document = pipeline.process("example.pdf")
+pipeline.save_output(document, "output.json", format="lightrag")
 ```
 
-**Methods:**
+说明：
+- 默认管道依赖 MinerU 与 LLM（需要 `MINERU_API_KEY`，以及 `OPENAI_API_KEY` 或 `ANTHROPIC_API_KEY`）
 
-- `process(pdf_path: str) -> Document`: Process a PDF file
-- `save_output(document: Document, output_path: str, format: str)`: Save output
+### `Paper2ChunkLegacyPipeline`（传统管道）
 
-### Config
+```python
+from paper2chunk import Paper2ChunkLegacyPipeline
+from paper2chunk.config import Config
 
-Configuration management.
+config = Config.from_env()
+config.features.enable_semantic_enhancement = False
+config.features.enable_chart_to_text = False
+
+pipeline = Paper2ChunkLegacyPipeline(config)
+document = pipeline.process("example.pdf")
+pipeline.save_output(document, "output.json", format="json")
+```
+
+## 配置（`paper2chunk/config.py`）
 
 ```python
 from paper2chunk.config import Config
@@ -27,179 +40,47 @@ from paper2chunk.config import Config
 config = Config.from_env()
 ```
 
-**Attributes:**
+常用环境变量（节选）：
+```bash
+# MinerU（默认管道必需）
+MINERU_API_KEY=...
+MINERU_TIMEOUT=300
+MINERU_POLL_INTERVAL=5
+MINERU_MAX_POLL_ATTEMPTS=60
 
-- `llm`: LLM configuration
-- `chunking`: Chunking parameters
-- `features`: Feature flags
+# LLM（默认管道必需；传统管道可关闭相关功能）
+LLM_PROVIDER=openai  # 或 anthropic
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-4o
+ANTHROPIC_API_KEY=...
+ANTHROPIC_MODEL=claude-3-opus-20240229
 
-### PDFParser
-
-Parse PDF documents.
-
-```python
-from paper2chunk.core import PDFParser
-
-parser = PDFParser()
-document = parser.parse("example.pdf")
+# 默认管道分片（token）
+CHUNK_SOFT_LIMIT=800
+CHUNK_HARD_LIMIT=2000
 ```
 
-### SemanticChunker
+## 输出格式化器
 
-Chunk documents semantically.
+位于 `paper2chunk/output_formatters/formatters.py`：
+- `LightRAGFormatter`
+- `LangChainFormatter`
+- `MarkdownFormatter`
+- `JSONFormatter`
 
-```python
-from paper2chunk.core import SemanticChunker
-from paper2chunk.config import ChunkingConfig
+## 命令行（CLI）
 
-config = ChunkingConfig(max_chunk_size=1000)
-chunker = SemanticChunker(config)
-chunks = chunker.chunk_document(document)
-```
-
-### MetadataInjector
-
-Inject metadata into chunks.
-
-```python
-from paper2chunk.core import MetadataInjector
-
-injector = MetadataInjector()
-enhanced_chunks = injector.inject_metadata(chunks)
-```
-
-### LLMRewriter
-
-Enhance chunks with LLM.
-
-```python
-from paper2chunk.core import LLMRewriter
-from paper2chunk.config import LLMConfig
-
-config = LLMConfig(provider="openai", openai_api_key="...")
-rewriter = LLMRewriter(config)
-enhanced_content = rewriter.enhance_chunk(chunk, title, hierarchy)
-```
-
-## Models
-
-### Document
-
-```python
-from paper2chunk.models import Document
-
-document = Document(
-    metadata=DocumentMetadata(...),
-    raw_text="...",
-    structured_content=[...],
-    images=[...],
-    chunks=[...]
-)
-```
-
-### Chunk
-
-```python
-from paper2chunk.models import Chunk, ChunkMetadata
-
-chunk = Chunk(
-    content="...",
-    metadata=ChunkMetadata(...),
-    enhanced_content="...",
-    entities=[...],
-    keywords=[...]
-)
-```
-
-## Output Formatters
-
-### LightRAGFormatter
-
-```python
-from paper2chunk.output_formatters import LightRAGFormatter
-
-formatter = LightRAGFormatter()
-formatted = formatter.format(chunks)
-formatter.to_json(chunks, "output.json")
-```
-
-### LangChainFormatter
-
-```python
-from paper2chunk.output_formatters import LangChainFormatter
-
-formatter = LangChainFormatter()
-formatted = formatter.format(chunks)
-```
-
-### MarkdownFormatter
-
-```python
-from paper2chunk.output_formatters import MarkdownFormatter
-
-formatter = MarkdownFormatter()
-markdown = formatter.format(chunks)
-formatter.to_file(chunks, "output.md")
-```
-
-## Configuration Options
-
-### Chunking Configuration
-
-```python
-from paper2chunk.config import ChunkingConfig
-
-config = ChunkingConfig(
-    max_chunk_size=1000,      # Maximum chunk size
-    min_chunk_size=100,       # Minimum chunk size
-    overlap_size=50,          # Overlap between chunks
-    preserve_structure=True   # Preserve document structure
-)
-```
-
-### LLM Configuration
-
-```python
-from paper2chunk.config import LLMConfig
-
-config = LLMConfig(
-    provider="openai",
-    openai_api_key="...",
-    openai_model="gpt-4",
-    temperature=0.3,
-    max_tokens=4000
-)
-```
-
-### Feature Configuration
-
-```python
-from paper2chunk.config import FeatureConfig
-
-config = FeatureConfig(
-    enable_chart_to_text=True,
-    enable_semantic_enhancement=True,
-    enable_metadata_injection=True
-)
-```
-
-## CLI Usage
+安装后会提供 `paper2chunk` 命令：
 
 ```bash
 paper2chunk [OPTIONS] input.pdf
-
-Options:
-  -o, --output PATH          Output file path (required)
-  -f, --format FORMAT        Output format [lightrag|langchain|markdown|json]
-  --no-enhancement          Disable LLM enhancement
-  --no-charts               Disable chart analysis
-  --no-metadata             Disable metadata injection
-  --max-chunk-size INT      Maximum chunk size
-  --min-chunk-size INT      Minimum chunk size
-  --overlap INT             Overlap size
-  --help                    Show help message
 ```
 
-## Examples
+常用参数（节选）：
+- `-o/--output`：输出路径（必填）
+- `-f/--format`：`lightrag|langchain|markdown|json`
+- `--legacy`：启用传统管道（不走 MinerU）
+- `--no-enhancement`：禁用 LLM 语义增强
+- `--no-charts`：禁用图表分析
+- `--no-metadata`：禁用元数据注入
 
-See the [examples](../examples/usage_examples.py) directory for more usage examples.

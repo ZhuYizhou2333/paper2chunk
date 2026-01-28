@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "paper2chunk"
+version = "0.1.0"
+description = "将 PDF 转换为 RAG 友好的语义分片（chunks）"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "ZhuYizhou" }]
+keywords = ["rag", "pdf", "chunking", "lightrag", "langchain"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+dependencies = [
+  "anthropic>=0.7.0",
+  "markdown>=3.4.0",
+  "numpy>=1.24.0",
+  "openai>=1.0.0",
+  "pillow>=10.0.0",
+  "pydantic>=2.0.0",
+  "pymupdf>=1.23.0",
+  "pypdf2>=3.0.0",
+  "python-dotenv>=1.0.0",
+  "requests>=2.31.0",
+  "tiktoken>=0.5.0",
+]
+
+[project.scripts]
+paper2chunk = "paper2chunk.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/ZhuYizhou2333/paper2chunk"
+Repository = "https://github.com/ZhuYizhou2333/paper2chunk"
+
+[dependency-groups]
+dev = [
+  "pytest>=7.4.0",
+  "pytest-cov>=4.1.0",
+]
+
+

@@ -1,4 +1,11 @@
-"""Configuration management for paper2chunk"""
+"""paper2chunk 配置管理
+
+约定：
+- 默认管道（4 层架构）主要使用 token 维度的 `soft_limit` / `hard_limit`
+- 传统管道（向后兼容）主要使用字符维度的 `max_chunk_size` / `min_chunk_size` / `overlap_size`
+
+为了兼容两条管道，`ChunkingConfig` 同时包含两套参数。
+"""
 
 from typing import Optional
 from pydantic import BaseModel, Field
@@ -9,7 +16,7 @@ load_dotenv()
 
 
 class MinerUConfig(BaseModel):
-    """MinerU API configuration"""
+    """MinerU API 配置"""
     api_key: Optional[str] = Field(default=None, description="MinerU API key")
     timeout: int = Field(default=300, ge=1, description="API timeout in seconds for file upload")
     poll_interval: int = Field(default=5, ge=1, description="Polling interval in seconds for parsing results")
@@ -18,7 +25,7 @@ class MinerUConfig(BaseModel):
 
 
 class LLMConfig(BaseModel):
-    """LLM configuration"""
+    """LLM 配置"""
     provider: str = Field(default="openai", description="LLM provider (openai or anthropic)")
     openai_api_key: Optional[str] = Field(default=None, description="OpenAI API key")
     openai_model: str = Field(default="gpt-4", description="OpenAI model name")
@@ -29,21 +36,29 @@ class LLMConfig(BaseModel):
 
 
 class ChunkingConfig(BaseModel):
-    """Chunking configuration"""
-    soft_limit: int = Field(default=800, description="Optimal chunk size in tokens")
-    hard_limit: int = Field(default=2000, description="Maximum chunk size in tokens")
-    preserve_structure: bool = Field(default=True, description="Preserve document structure")
+    """分片配置（同时兼容默认管道与传统管道）"""
+
+    # 默认管道（token 维度）
+    soft_limit: int = Field(default=800, description="最佳分片大小（token）")
+    hard_limit: int = Field(default=2000, description="最大分片大小（token）")
+
+    # 传统管道（字符维度）
+    max_chunk_size: int = Field(default=1000, ge=1, description="最大分片大小（字符）")
+    min_chunk_size: int = Field(default=100, ge=1, description="最小分片大小（字符）")
+    overlap_size: int = Field(default=50, ge=0, description="分片重叠大小（字符）")
+
+    preserve_structure: bool = Field(default=True, description="是否尽量保持文档结构")
 
 
 class FeatureConfig(BaseModel):
-    """Feature flags"""
+    """功能开关"""
     enable_chart_to_text: bool = Field(default=True, description="Enable chart-to-text conversion")
     enable_semantic_enhancement: bool = Field(default=True, description="Enable semantic enhancement")
     enable_metadata_injection: bool = Field(default=True, description="Enable metadata injection")
 
 
 class Config(BaseModel):
-    """Main configuration class"""
+    """主配置对象"""
     mineru: MinerUConfig = Field(default_factory=MinerUConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
@@ -51,7 +66,7 @@ class Config(BaseModel):
 
     @classmethod
     def from_env(cls) -> "Config":
-        """Load configuration from environment variables"""
+        """从环境变量加载配置"""
         mineru_config = MinerUConfig(
             api_key=os.getenv("MINERU_API_KEY"),
             timeout=cls._parse_int_env("MINERU_TIMEOUT", 300),
@@ -69,8 +84,13 @@ class Config(BaseModel):
         )
         
         chunking_config = ChunkingConfig(
+            # 默认管道（token）
             soft_limit=cls._parse_int_env("CHUNK_SOFT_LIMIT", 800),
             hard_limit=cls._parse_int_env("CHUNK_HARD_LIMIT", 2000),
+            # 传统管道（字符）
+            max_chunk_size=cls._parse_int_env("MAX_CHUNK_SIZE", 1000),
+            min_chunk_size=cls._parse_int_env("MIN_CHUNK_SIZE", 100),
+            overlap_size=cls._parse_int_env("OVERLAP_SIZE", 50),
         )
         
         features_config = FeatureConfig(
@@ -87,14 +107,14 @@ class Config(BaseModel):
     
     @staticmethod
     def _parse_int_env(key: str, default: int) -> int:
-        """Parse integer from environment variable with error handling
+        """解析整数环境变量（带兜底与告警）
         
         Args:
-            key: Environment variable key
-            default: Default value if not set or invalid
+            key: 环境变量名
+            default: 未设置或非法时的默认值
             
         Returns:
-            Parsed integer value
+            解析后的整数
         """
         value = os.getenv(key)
         if value is None:
