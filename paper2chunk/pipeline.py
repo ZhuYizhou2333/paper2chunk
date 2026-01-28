@@ -84,12 +84,12 @@ class Paper2ChunkPipeline:
                     print(f"Warning: Could not initialize LLM rewriter: {e}")
             
             # Optional: Chart Analyzer
+            # 图片信息必须可检索：即使关闭“图表转文本”，也会注入提取信息；关闭时仅不调用视觉模型
             self.chart_analyzer = None
-            if self.config.features.enable_chart_to_text:
-                try:
-                    self.chart_analyzer = ChartAnalyzer(self.config.llm)
-                except Exception as e:
-                    print(f"Warning: Could not initialize chart analyzer: {e}")
+            try:
+                self.chart_analyzer = ChartAnalyzer(self.config.llm)
+            except Exception as e:
+                print(f"Warning: Could not initialize image captioner: {e}")
                     
         except Exception as e:
             raise RuntimeError(f"Failed to initialize pipeline: {e}")
@@ -114,6 +114,19 @@ class Paper2ChunkPipeline:
         print(f"  ✓ Extracted {len(document.blocks)} blocks")
         print(f"  ✓ Document: {document.metadata.title}")
         print(f"  ✓ Pages: {document.metadata.total_pages}\n")
+
+        # 图片必须注入到文段中（供后续树构建与 chunking 检索）
+        if self.chart_analyzer:
+            print("【Layer 1.5】图片注入 - 提取信息 + 视觉模型描述")
+            self.chart_analyzer.inject_image_descriptions_into_blocks(
+                document.blocks,
+                document.images,
+                document.metadata.title,
+                enable_llm=self.config.features.enable_chart_to_text,
+            )
+            # 同步 raw_text（避免后续某些输出侧仍只看 raw_text）
+            document.raw_text = "\n\n".join(b.text for b in document.blocks if b.text).strip()
+            print()
         
         # Layer 2: Logic Repair (LLM)
         print("【Layer 2/4】Logic Layer - LLM TOC Hierarchy Repair")
@@ -145,15 +158,6 @@ class Paper2ChunkPipeline:
             print("【Optional】Enhancing chunks with LLM...")
             chunks = self._enhance_chunks(chunks, document.metadata.title)
             print()
-        
-        # Optional: Chart analysis
-        if self.chart_analyzer and self.config.features.enable_chart_to_text:
-            print("【Optional】Analyzing charts and images...")
-            chart_descriptions = self.chart_analyzer.analyze_images_in_document(
-                document.images,
-                document.metadata.title
-            )
-            print(f"  ✓ Analyzed {len(chart_descriptions)} images\n")
         
         # Update document with chunks
         document.chunks = chunks

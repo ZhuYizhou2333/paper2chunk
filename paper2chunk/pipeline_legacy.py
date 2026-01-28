@@ -71,14 +71,11 @@ class Paper2ChunkLegacyPipeline:
         
         # Step 2: Analyze charts (optional)
         if self.chart_analyzer and self.config.features.enable_chart_to_text:
-            print("Step 2/5: Analyzing charts and images...")
-            chart_descriptions = self.chart_analyzer.analyze_images_in_document(
-                document.images,
-                document.metadata.title
-            )
-            print(f"  ✓ Analyzed {len(chart_descriptions)} images")
+            print("Step 2/5: 图片/图表视觉描述注入中...")
+            self.chart_analyzer.inject_images_into_legacy_document(document, enable_llm=True)
+            print(f"  ✓ 已注入 {len(document.images)} 张图片到文段")
         else:
-            print("Step 2/5: Skipping chart analysis (disabled or unavailable)")
+            print("Step 2/5: 跳过图片注入（已关闭或不可用）")
         
         # Step 3: Semantic chunking
         print("Step 3/5: Creating semantic chunks...")

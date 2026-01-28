@@ -52,6 +52,9 @@ MINERU_MAX_POLL_ATTEMPTS=60
 OPENAI_API_KEY=...
 OPENAI_BASE_URL=https://api.openai.com/v1  # 可选：自定义 OpenAI 兼容端点
 OPENAI_MODEL=gpt-4o
+OPENAI_VISION_MODEL=gpt-4o              # 可选：图片转文本使用的模型（默认同 OPENAI_MODEL）
+OPENAI_VISION_DETAIL=low                # 可选：low|high|auto（默认 low）
+OPENAI_VISION_MAX_TOKENS=800            # 可选：图片描述最大输出 token 数
 
 # 默认管道分片（token）
 CHUNK_SOFT_LIMIT=800

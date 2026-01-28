@@ -376,6 +376,9 @@ class MinerUParser:
                 continue
 
             block_type = str(item.get("type") or "text")
+            # 页眉页脚属于噪声：直接丢弃（章节标题来自 text + text_level，不受影响）
+            if block_type in {"header", "footer", "page_header", "page_footer"}:
+                continue
             page_idx = int(item.get("page_idx") or 0)
             max_page_idx = max(max_page_idx, page_idx)
 

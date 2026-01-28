@@ -99,6 +99,9 @@ MINERU_MAX_POLL_ATTEMPTS=60         # 最大轮询次数（总等待时间 = 间
 OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_MODEL=gpt-4o
 # OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_VISION_MODEL=gpt-4o          # 可选：图片转文本模型（默认同 OPENAI_MODEL）
+OPENAI_VISION_DETAIL=low            # 可选：low|high|auto（默认 low）
+OPENAI_VISION_MAX_TOKENS=800        # 可选：图片描述最大输出 token 数
 
 # 分片配置（token 数）
 CHUNK_SOFT_LIMIT=800

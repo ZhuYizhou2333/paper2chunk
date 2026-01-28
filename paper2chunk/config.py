@@ -36,6 +36,12 @@ class LLMConfig(BaseModel):
     api_key: Optional[str] = Field(default=None, description="OpenAI 兼容 API Key（例如 OPENAI_API_KEY）")
     base_url: Optional[str] = Field(default=None, description="自定义 OpenAI 兼容端点（例如 https://api.openai.com/v1）")
     model: str = Field(default="gpt-4o", description="模型名称（例如 gpt-4o）")
+    vision_model: Optional[str] = Field(
+        default=None,
+        description="视觉模型名称（用于图片转文本；默认与 model 相同，可用 OPENAI_VISION_MODEL 覆盖）",
+    )
+    vision_detail: str = Field(default="low", description="视觉输入 detail：low|high|auto（默认 low）")
+    vision_max_tokens: int = Field(default=800, description="视觉描述最大输出 token 数")
     temperature: float = Field(default=0.3, description="采样温度")
     max_tokens: int = Field(default=4000, description="最大输出 token 数")
 
@@ -84,6 +90,9 @@ class Config(BaseModel):
             api_key=os.getenv("OPENAI_API_KEY"),
             base_url=os.getenv("OPENAI_BASE_URL"),
             model=os.getenv("OPENAI_MODEL", "gpt-4o"),
+            vision_model=os.getenv("OPENAI_VISION_MODEL"),
+            vision_detail=os.getenv("OPENAI_VISION_DETAIL", "low"),
+            vision_max_tokens=cls._parse_int_env("OPENAI_VISION_MAX_TOKENS", 800),
         )
         
         chunking_config = ChunkingConfig(

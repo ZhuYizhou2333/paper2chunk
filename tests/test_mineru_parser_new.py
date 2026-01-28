@@ -30,6 +30,12 @@ def test_convert_content_list_to_blocks_and_images():
     png_bytes = _make_png_bytes()
     content_list = [
         {
+            "type": "header",
+            "text": "Running header",
+            "bbox": [0, 0, 1000, 50],
+            "page_idx": 0,
+        },
+        {
             "type": "text",
             "text": "Title",
             "text_level": 1,
@@ -48,6 +54,12 @@ def test_convert_content_list_to_blocks_and_images():
             "image_caption": ["Fig 1"],
             "image_footnote": [],
             "bbox": [10, 20, 30, 40],
+            "page_idx": 1,
+        },
+        {
+            "type": "footer",
+            "text": "Page 2",
+            "bbox": [0, 950, 1000, 1000],
             "page_idx": 1,
         },
     ]
