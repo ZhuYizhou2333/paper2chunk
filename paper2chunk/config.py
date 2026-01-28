@@ -11,9 +11,10 @@ load_dotenv()
 class MinerUConfig(BaseModel):
     """MinerU API configuration"""
     api_key: Optional[str] = Field(default=None, description="MinerU API key")
-    timeout: int = Field(default=300, description="API timeout in seconds for file upload")
-    poll_interval: int = Field(default=5, description="Polling interval in seconds for parsing results")
-    max_poll_attempts: int = Field(default=60, description="Maximum polling attempts (total wait time = poll_interval * max_poll_attempts)")
+    timeout: int = Field(default=300, ge=1, description="API timeout in seconds for file upload")
+    poll_interval: int = Field(default=5, ge=1, description="Polling interval in seconds for parsing results")
+    max_poll_attempts: int = Field(default=60, ge=1, description="Maximum polling attempts (total wait time = poll_interval * max_poll_attempts)")
+    api_base_url: str = Field(default="https://mineru.net", description="MinerU API base URL")
 
 
 class LLMConfig(BaseModel):
@@ -56,6 +57,7 @@ class Config(BaseModel):
             timeout=cls._parse_int_env("MINERU_TIMEOUT", 300),
             poll_interval=cls._parse_int_env("MINERU_POLL_INTERVAL", 5),
             max_poll_attempts=cls._parse_int_env("MINERU_MAX_POLL_ATTEMPTS", 60),
+            api_base_url=os.getenv("MINERU_API_BASE_URL", "https://mineru.net"),
         )
         
         llm_config = LLMConfig(

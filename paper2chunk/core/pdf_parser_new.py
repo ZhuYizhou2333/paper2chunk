@@ -92,7 +92,7 @@ class MinerUParser:
         pdf_filename = Path(pdf_path).name
         
         # Step 1: Request upload URL from batch API
-        batch_url = "https://mineru.net/api/v4/file-urls/batch"
+        batch_url = f"{self.config.api_base_url}/api/v4/file-urls/batch"
         headers = {
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {self.config.api_key}'
@@ -140,14 +140,17 @@ class MinerUParser:
             
             return parsed_result
             
+        except RuntimeError:
+            # Re-raise RuntimeError from polling as-is to preserve context
+            raise
         except requests.exceptions.HTTPError as e:
             raise RuntimeError(
                 f"MinerU API call failed for '{pdf_path}': "
                 f"HTTP {e.response.status_code} - {e.response.text[:200]}"
             )
-        except requests.exceptions.Timeout:
+        except requests.exceptions.Timeout as e:
             raise RuntimeError(
-                f"MinerU API call timed out for '{pdf_path}' after {self.config.timeout}s"
+                f"MinerU API request timed out for '{pdf_path}': {e}"
             )
         except requests.exceptions.RequestException as e:
             raise RuntimeError(f"MinerU API call failed for '{pdf_path}': {e}")
@@ -168,7 +171,7 @@ class MinerUParser:
         """
         import time
         
-        result_url = f"https://mineru.net/api/v4/batches/{batch_id}"
+        result_url = f"{self.config.api_base_url}/api/v4/batches/{batch_id}"
         headers = {
             'Authorization': f'Bearer {self.config.api_key}'
         }
@@ -192,17 +195,24 @@ class MinerUParser:
                     print(f"  ✓ Parsing completed after {(attempt + 1) * interval}s")
                     # Extract the parsed data
                     files = batch_data.get("files", [])
-                    if files:
-                        file_data = files[0]
-                        # Get the actual parsing result
-                        if "result" in file_data:
-                            return file_data["result"]
-                        elif "result_url" in file_data:
-                            # Download result from URL
+                    if not files:
+                        raise RuntimeError("No files returned in completed batch result")
+                    
+                    file_data = files[0]
+                    
+                    # Get the actual parsing result
+                    if "result" in file_data:
+                        return file_data["result"]
+                    elif "result_url" in file_data:
+                        # Download result from URL
+                        try:
                             result_response = requests.get(file_data["result_url"], timeout=30)
                             result_response.raise_for_status()
                             return result_response.json()
-                    return batch_data
+                        except requests.exceptions.RequestException as e:
+                            raise RuntimeError(f"Failed to download parsing result from result_url: {e}")
+                    else:
+                        raise RuntimeError("Batch completed but no result or result_url found in file data")
                     
                 elif status == "failed":
                     error_msg = batch_data.get("error", "Unknown error")
@@ -214,19 +224,23 @@ class MinerUParser:
                         time.sleep(interval)
                         continue
                     else:
-                        raise RuntimeError(f"Parsing timeout after {max_attempts * interval}s")
+                        raise RuntimeError(f"Parsing timeout after {max_attempts * interval}s (status: {status})")
                 
                 else:
-                    raise RuntimeError(f"Unknown status: {status}")
+                    raise RuntimeError(f"Unknown batch status: {status}")
                     
+            except RuntimeError:
+                # Re-raise RuntimeError as-is
+                raise
             except requests.exceptions.RequestException as e:
                 if attempt < max_attempts - 1:
                     time.sleep(interval)
                     continue
                 else:
-                    raise RuntimeError(f"Failed to poll parsing result: {e}")
+                    raise RuntimeError(f"Failed to poll parsing result after {max_attempts} attempts: {e}")
         
-        raise RuntimeError(f"Parsing timeout after {max_attempts * interval}s")
+        # This should not be reached due to loop logic, but just in case
+        raise RuntimeError(f"Polling loop exhausted without result")
     
     def _extract_metadata(self, parsed_result: Dict[str, Any], pdf_path: str) -> DocumentMetadata:
         """Extract document metadata from MinerU result
