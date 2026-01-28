@@ -22,7 +22,7 @@ def main():
         print(f"❌ Error: PDF file not found: {pdf_path}")
         print("\nTo run this example:")
         print("1. Set MINERU_API_KEY in .env file (get from https://mineru.net/)")
-        print("2. Set OPENAI_API_KEY or ANTHROPIC_API_KEY in .env file")
+        print("2. Set OPENAI_API_KEY (and optional OPENAI_BASE_URL) in .env file")
         print("3. Replace 'example.pdf' with path to your PDF file")
         print("\nExample:")
         print("  python pipeline_example.py")

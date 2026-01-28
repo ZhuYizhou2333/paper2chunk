@@ -1,171 +1,117 @@
-"""LLM-based rewriter for semantic enhancement"""
+"""基于 LLM 的文本改写器（语义增强）
 
-from typing import Optional, List
-try:
-    import openai
-except ImportError:
-    openai = None
+本模块统一使用 OpenAI 官方 Python SDK，并支持通过 `base_url` 指向任意 OpenAI 兼容的 API 端点。
+"""
 
-try:
-    from anthropic import Anthropic
-except ImportError:
-    Anthropic = None
+from __future__ import annotations
+
+from typing import List, Optional, Tuple
 
 from paper2chunk.config import LLMConfig
 from paper2chunk.models import Chunk
 
+try:
+    from openai import OpenAI
+except Exception:  # pragma: no cover
+    OpenAI = None  # type: ignore
+
 
 class LLMRewriter:
-    """Rewrite content using LLM for semantic enhancement"""
-    
+    """使用 LLM 对 chunk 做语义增强（代词消解、信息显式化、实体加粗等）。"""
+
     def __init__(self, config: LLMConfig):
         self.config = config
-        
-        if config.provider == "openai":
-            if openai is None:
-                raise ImportError("openai package is required. Install with: pip install openai")
-            if not config.openai_api_key:
-                raise ValueError("OpenAI API key is required when using OpenAI provider")
-            openai.api_key = config.openai_api_key
-            self.client = openai.OpenAI(api_key=config.openai_api_key)
-        elif config.provider == "anthropic":
-            if Anthropic is None:
-                raise ImportError("anthropic package is required. Install with: pip install anthropic")
-            if not config.anthropic_api_key:
-                raise ValueError("Anthropic API key is required when using Anthropic provider")
-            self.client = Anthropic(api_key=config.anthropic_api_key)
-        else:
-            raise ValueError(f"Unsupported LLM provider: {config.provider}")
-    
+
+        if OpenAI is None:
+            raise ImportError("缺少依赖：openai。请使用 `uv sync` 安装依赖后重试。")
+        if not self.config.api_key:
+            raise ValueError("缺少 LLM API Key：请设置环境变量 OPENAI_API_KEY。")
+
+        client_kwargs = {"api_key": self.config.api_key}
+        if self.config.base_url:
+            client_kwargs["base_url"] = self.config.base_url
+        self.client = OpenAI(**client_kwargs)
+
     def enhance_chunk(self, chunk: Chunk, document_title: str, section_hierarchy: List[str]) -> str:
-        """Enhance a chunk with semantic context
-        
-        Args:
-            chunk: The chunk to enhance
-            document_title: Title of the document
-            section_hierarchy: Hierarchy of sections
-            
-        Returns:
-            Enhanced content with semantic context
-        """
-        # Build context from metadata
+        """对单个 chunk 做语义增强。"""
         context = self._build_context(document_title, section_hierarchy, chunk.metadata.publish_date)
-        
         prompt = self._build_enhancement_prompt(chunk.content, context)
-        
-        if self.config.provider == "openai":
-            return self._enhance_with_openai(prompt)
-        else:
-            return self._enhance_with_anthropic(prompt)
-    
-    def _build_context(self, document_title: str, section_hierarchy: List[str], publish_date: Optional[str]) -> str:
-        """Build context string from metadata"""
-        context_parts = [f"Document: {document_title}"]
-        
-        if section_hierarchy:
-            context_parts.append(f"Section: {' > '.join(section_hierarchy)}")
-        
-        if publish_date:
-            context_parts.append(f"Date: {publish_date}")
-        
-        return " | ".join(context_parts)
-    
-    def _build_enhancement_prompt(self, content: str, context: str) -> str:
-        """Build prompt for semantic enhancement"""
-        return f"""You are a semantic enhancement expert for RAG systems. Your task is to rewrite the given text to make it more self-contained and semantically rich.
+        return self._chat_text(prompt, system="你是面向 RAG 系统的语义增强专家。")
 
-Context: {context}
+    def extract_entities_and_keywords(self, text: str) -> Tuple[List[str], List[str]]:
+        """抽取实体与关键词（返回 entities, keywords）。"""
+        prompt = f"""请从下面文本中抽取关键实体与关键词，并返回 JSON。
 
-Original text:
-{content}
+文本：
+{text}
 
-Instructions:
-1. Add semantic context to pronouns and references (e.g., "it" → "[specific entity]")
-2. Make implicit information explicit (e.g., "in 2020" → "in [2020]")
-3. Add clarifying context from the section hierarchy when relevant
-4. Preserve all original information and meaning
-5. Use **bold** for key entities and concepts
-6. Keep the text concise and readable
+要求：
+- 返回一个 JSON 对象，包含两个数组字段：
+  - "entities": 命名实体（人名/机构/地点/概念等）
+  - "keywords": 重要关键词或短语
+- 只返回 JSON，不要额外解释，不要 Markdown 代码块。
 
-Enhanced text:"""
-    
-    def _enhance_with_openai(self, prompt: str) -> str:
-        """Enhance using OpenAI API"""
+示例：
+{{
+  "entities": ["实体1", "实体2"],
+  "keywords": ["关键词1", "关键词2"]
+}}
+"""
+        result = self._chat_text(prompt, system="你是信息抽取专家。")
+
+        try:
+            import json
+
+            data = json.loads(result)
+            return data.get("entities", []) or [], data.get("keywords", []) or []
+        except Exception as e:
+            print(f"Error extracting entities/keywords: {type(e).__name__}: {e}")
+            return [], []
+
+    def _chat_text(self, prompt: str, system: str) -> str:
+        """通过 Chat Completions 获取文本输出。"""
         try:
             response = self.client.chat.completions.create(
-                model=self.config.openai_model,
+                model=self.config.model,
                 messages=[
-                    {"role": "system", "content": "You are a semantic enhancement expert for RAG systems."},
-                    {"role": "user", "content": prompt}
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt},
                 ],
                 temperature=self.config.temperature,
                 max_tokens=self.config.max_tokens,
             )
-            return response.choices[0].message.content.strip()
+            return (response.choices[0].message.content or "").strip()
         except Exception as e:
-            print(f"Error calling OpenAI API: {e}")
+            print(f"Error calling OpenAI-compatible API: {type(e).__name__}: {e}")
             return ""
-    
-    def _enhance_with_anthropic(self, prompt: str) -> str:
-        """Enhance using Anthropic API"""
-        try:
-            response = self.client.messages.create(
-                model=self.config.anthropic_model,
-                max_tokens=self.config.max_tokens,
-                temperature=self.config.temperature,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            return response.content[0].text.strip()
-        except Exception as e:
-            print(f"Error calling Anthropic API: {e}")
-            return ""
-    
-    def extract_entities_and_keywords(self, text: str) -> tuple[List[str], List[str]]:
-        """Extract entities and keywords from text using LLM
-        
-        Returns:
-            Tuple of (entities, keywords)
-        """
-        prompt = f"""Extract key entities and keywords from the following text.
 
-Text:
-{text}
+    @staticmethod
+    def _build_context(document_title: str, section_hierarchy: List[str], publish_date: Optional[str]) -> str:
+        """从元数据构建上下文提示。"""
+        context_parts = [f"文档：{document_title}"]
+        if section_hierarchy:
+            context_parts.append(f"章节：{' > '.join(section_hierarchy)}")
+        if publish_date:
+            context_parts.append(f"日期：{publish_date}")
+        return " | ".join(context_parts)
 
-Return a JSON object with two arrays:
-- "entities": Named entities (people, organizations, locations, concepts)
-- "keywords": Important keywords and phrases
+    @staticmethod
+    def _build_enhancement_prompt(content: str, context: str) -> str:
+        """构建语义增强 prompt。"""
+        return f"""你需要对给定文本做“语义增强”，以便更适合用于 RAG 检索与问答。
 
-Format:
-{{
-  "entities": ["entity1", "entity2"],
-  "keywords": ["keyword1", "keyword2"]
-}}
-"""
-        
-        try:
-            if self.config.provider == "openai":
-                response = self.client.chat.completions.create(
-                    model=self.config.openai_model,
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.3,
-                    max_tokens=500,
-                )
-                result = response.choices[0].message.content.strip()
-            else:
-                response = self.client.messages.create(
-                    model=self.config.anthropic_model,
-                    max_tokens=500,
-                    temperature=0.3,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                result = response.content[0].text.strip()
-            
-            # Parse JSON response
-            import json
-            data = json.loads(result)
-            return data.get("entities", []), data.get("keywords", [])
-        except Exception as e:
-            print(f"Error extracting entities/keywords: {e}")
-            return [], []
+上下文：{context}
+
+原文：
+{content}
+
+要求：
+1. 消解代词与指代（例如“它/这/该方法”→ 明确为具体实体或概念）
+2. 将隐含信息显式化（例如“在 2020 年”→ “在【2020 年】”）
+3. 必要时结合章节层级补充关键上下文（不要编造原文没有的信息）
+4. 保留原意与所有事实信息，不要删减关键内容
+5. 对关键实体与概念使用 **加粗**
+6. 结果保持简洁、可读
+
+请直接输出增强后的文本："""
+

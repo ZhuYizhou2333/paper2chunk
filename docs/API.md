@@ -15,7 +15,7 @@ pipeline.save_output(document, "output.json", format="lightrag")
 ```
 
 说明：
-- 默认管道依赖 MinerU 与 LLM（需要 `MINERU_API_KEY`，以及 `OPENAI_API_KEY` 或 `ANTHROPIC_API_KEY`）
+- 默认管道依赖 MinerU 与 LLM（需要 `MINERU_API_KEY` 与 `OPENAI_API_KEY`）
 
 ### `Paper2ChunkLegacyPipeline`（传统管道）
 
@@ -49,11 +49,9 @@ MINERU_POLL_INTERVAL=5
 MINERU_MAX_POLL_ATTEMPTS=60
 
 # LLM（默认管道必需；传统管道可关闭相关功能）
-LLM_PROVIDER=openai  # 或 anthropic
 OPENAI_API_KEY=...
+OPENAI_BASE_URL=https://api.openai.com/v1  # 可选：自定义 OpenAI 兼容端点
 OPENAI_MODEL=gpt-4o
-ANTHROPIC_API_KEY=...
-ANTHROPIC_MODEL=claude-3-opus-20240229
 
 # 默认管道分片（token）
 CHUNK_SOFT_LIMIT=800
@@ -83,4 +81,3 @@ paper2chunk [OPTIONS] input.pdf
 - `--no-enhancement`：禁用 LLM 语义增强
 - `--no-charts`：禁用图表分析
 - `--no-metadata`：禁用元数据注入
-

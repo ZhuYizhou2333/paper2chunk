@@ -49,10 +49,10 @@ class Paper2ChunkPipeline:
                 "Get your API key from: https://mineru.net/"
             )
         
-        if not (self.config.llm.openai_api_key or self.config.llm.anthropic_api_key):
+        if not self.config.llm.api_key:
             raise ValueError(
                 "LLM API key is required for the pipeline.\n"
-                "Please set OPENAI_API_KEY or ANTHROPIC_API_KEY in your .env file."
+                "Please set OPENAI_API_KEY in your .env file."
             )
         
         # Initialize components

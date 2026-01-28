@@ -25,14 +25,19 @@ class MinerUConfig(BaseModel):
 
 
 class LLMConfig(BaseModel):
-    """LLM 配置"""
-    provider: str = Field(default="openai", description="LLM provider (openai or anthropic)")
-    openai_api_key: Optional[str] = Field(default=None, description="OpenAI API key")
-    openai_model: str = Field(default="gpt-4", description="OpenAI model name")
-    anthropic_api_key: Optional[str] = Field(default=None, description="Anthropic API key")
-    anthropic_model: str = Field(default="claude-3-opus-20240229", description="Anthropic model name")
-    temperature: float = Field(default=0.3, description="Temperature for LLM")
-    max_tokens: int = Field(default=4000, description="Max tokens for LLM response")
+    """LLM 配置（统一使用 OpenAI Python SDK）
+
+    说明：
+    - 本项目不再支持“按 provider 选择不同 SDK”的方案（例如 Anthropic SDK）。
+    - 统一使用 OpenAI 官方客户端 `OpenAI(...)`，并通过 `base_url` 支持 OpenAI 兼容的自定义 API 端点。
+    - 这意味着：只要你的服务兼容 OpenAI Chat Completions 接口，就可以通过配置 `OPENAI_BASE_URL` + `OPENAI_MODEL` 使用。
+    """
+
+    api_key: Optional[str] = Field(default=None, description="OpenAI 兼容 API Key（例如 OPENAI_API_KEY）")
+    base_url: Optional[str] = Field(default=None, description="自定义 OpenAI 兼容端点（例如 https://api.openai.com/v1）")
+    model: str = Field(default="gpt-4o", description="模型名称（例如 gpt-4o）")
+    temperature: float = Field(default=0.3, description="采样温度")
+    max_tokens: int = Field(default=4000, description="最大输出 token 数")
 
 
 class ChunkingConfig(BaseModel):
@@ -76,11 +81,9 @@ class Config(BaseModel):
         )
         
         llm_config = LLMConfig(
-            provider=os.getenv("LLM_PROVIDER", "openai"),
-            openai_api_key=os.getenv("OPENAI_API_KEY"),
-            openai_model=os.getenv("OPENAI_MODEL", "gpt-4o"),
-            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
-            anthropic_model=os.getenv("ANTHROPIC_MODEL", "claude-3-opus-20240229"),
+            api_key=os.getenv("OPENAI_API_KEY"),
+            base_url=os.getenv("OPENAI_BASE_URL"),
+            model=os.getenv("OPENAI_MODEL", "gpt-4o"),
         )
         
         chunking_config = ChunkingConfig(
@@ -96,6 +99,7 @@ class Config(BaseModel):
         features_config = FeatureConfig(
             enable_chart_to_text=os.getenv("ENABLE_CHART_TO_TEXT", "true").lower() == "true",
             enable_semantic_enhancement=os.getenv("ENABLE_SEMANTIC_ENHANCEMENT", "true").lower() == "true",
+            enable_metadata_injection=os.getenv("ENABLE_METADATA_INJECTION", "true").lower() == "true",
         )
         
         return cls(

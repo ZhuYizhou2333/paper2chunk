@@ -94,16 +94,11 @@ MINERU_TIMEOUT=300                  # 文件上传超时（秒）
 MINERU_POLL_INTERVAL=5              # 轮询间隔（秒）
 MINERU_MAX_POLL_ATTEMPTS=60         # 最大轮询次数（总等待时间 = 间隔 × 次数）
 
-# OpenAI 配置（推荐使用 GPT-4o）
+# LLM 配置（统一使用 OpenAI Python SDK）
+# 支持自定义 OpenAI 兼容 API 端点（例如公司网关/私有部署）
 OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_MODEL=gpt-4o
-
-# 或 Anthropic 配置
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
-ANTHROPIC_MODEL=claude-3-opus-20240229
-
-# 选择 LLM 提供商
-LLM_PROVIDER=openai  # 或 anthropic
+# OPENAI_BASE_URL=https://api.openai.com/v1
 
 # 分片配置（token 数）
 CHUNK_SOFT_LIMIT=800
@@ -274,9 +269,9 @@ RAG-ready Chunks
 - `enable_metadata_injection`: 启用元数据注入，默认 true
 
 ### LLM 配置
-- `provider`: LLM 提供商（openai 或 anthropic）
-- `openai_model`: OpenAI 模型名称，默认 gpt-4o
-- `anthropic_model`: Anthropic 模型名称
+- `api_key`: API Key（来自 `OPENAI_API_KEY`）
+- `base_url`: 自定义 API 端点（来自 `OPENAI_BASE_URL`，可选）
+- `model`: 模型名称（来自 `OPENAI_MODEL`，默认 gpt-4o）
 - `temperature`: 温度参数，默认 0.3
 
 ## 🎓 使用场景
@@ -324,7 +319,7 @@ MIT License - 详见 LICENSE 文件
 感谢以下开源项目：
 - **MinerU (Magic-PDF)** - SOTA PDF 视觉解析
 - **PyMuPDF** - 传统 PDF 解析
-- **OpenAI / Anthropic** - LLM 支持
+- **OpenAI** - OpenAI 兼容 LLM 客户端
 - **LangChain** - RAG 框架
 - **LightRAG** - Graph RAG 实现
 

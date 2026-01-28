@@ -1,235 +1,177 @@
-"""Logic repair module for LLM-based TOC hierarchy correction"""
+"""逻辑层：目录树（标题层级）修复
+
+核心思路：
+- 从 MinerU 的输出中抽取“骨架”（所有标题）。
+- 交给 LLM 仅做层级标注（level=1..4），再回填到对应 Block。
+- 若 LLM 不可用/返回异常，则使用规则推断作为兜底。
+
+注意：本项目统一使用 OpenAI 官方 Python SDK，并支持通过 `base_url` 连接自定义 OpenAI 兼容端点。
+"""
+
+from __future__ import annotations
 
 import json
-from typing import List, Dict, Any
-from paper2chunk.models import Block
+import re
+from typing import Any, Dict, List
+
 from paper2chunk.config import LLMConfig
+from paper2chunk.models import Block
+
+try:
+    from openai import OpenAI
+except Exception:  # pragma: no cover
+    OpenAI = None  # type: ignore
 
 
 class LogicRepairer:
-    """Repair document structure using LLM
-    
-    This module extracts the "skeleton" (all headers) from MinerU output
-    and uses LLM to correct the hierarchy levels (H1, H2, H3, H4) based on:
-    - Numbering logic (e.g., 1. vs 1.1)
-    - Semantic logic (e.g., 'Introduction' vs 'Background')
-    """
-    
+    """使用 LLM 修复标题层级（H1~H4）。"""
+
     def __init__(self, config: LLMConfig):
-        """Initialize the logic repairer
-        
-        Args:
-            config: LLM configuration
-        """
         self.config = config
         self._init_llm_client()
-    
-    def _init_llm_client(self):
-        """Initialize LLM client based on provider"""
-        if self.config.provider == "openai":
-            if not self.config.openai_api_key:
-                raise ValueError("OpenAI API key is required")
-            import openai
-            self.client = openai.OpenAI(api_key=self.config.openai_api_key)
-            self.model = self.config.openai_model
-        elif self.config.provider == "anthropic":
-            if not self.config.anthropic_api_key:
-                raise ValueError("Anthropic API key is required")
-            import anthropic
-            self.client = anthropic.Anthropic(api_key=self.config.anthropic_api_key)
-            self.model = self.config.anthropic_model
-        else:
-            raise ValueError(f"Unsupported LLM provider: {self.config.provider}")
-    
+
+    def _init_llm_client(self) -> None:
+        """初始化 OpenAI 兼容客户端。"""
+        if OpenAI is None:
+            raise ImportError("缺少依赖：openai。请使用 `uv sync` 安装依赖后重试。")
+        if not self.config.api_key:
+            raise ValueError("缺少 LLM API Key：请设置环境变量 OPENAI_API_KEY。")
+
+        client_kwargs = {"api_key": self.config.api_key}
+        if self.config.base_url:
+            client_kwargs["base_url"] = self.config.base_url
+        self.client = OpenAI(**client_kwargs)
+
     def repair_hierarchy(self, blocks: List[Block]) -> List[Block]:
-        """Repair header hierarchy levels using LLM
-        
-        Args:
-            blocks: List of blocks from MinerU
-            
-        Returns:
-            List of blocks with corrected header levels
-        """
+        """修复 blocks 中标题（type=header）的 level。"""
         print("Repairing header hierarchy with LLM...")
-        
-        # Step 1: Extract skeleton (all headers)
+
         skeleton = self._extract_skeleton(blocks)
-        
         if not skeleton:
             print("  ✓ No headers found, skipping hierarchy repair")
             return blocks
-        
-        # Step 2: Use LLM to repair hierarchy
-        corrected_skeleton = self._llm_repair(skeleton)
-        
-        # Step 3: Write back corrected levels to blocks
-        blocks = self._write_back_levels(blocks, corrected_skeleton)
-        
+
+        corrected = self._llm_repair(skeleton)
+        blocks = self._write_back_levels(blocks, corrected)
+
         print(f"  ✓ Repaired hierarchy for {len(skeleton)} headers")
         return blocks
-    
-    def _extract_skeleton(self, blocks: List[Block]) -> List[Dict[str, Any]]:
-        """Extract all headers to form skeleton
-        
-        Args:
-            blocks: List of all blocks
-            
-        Returns:
-            List of header information
-        """
-        skeleton = []
+
+    @staticmethod
+    def _extract_skeleton(blocks: List[Block]) -> List[Dict[str, Any]]:
+        """抽取标题骨架。"""
+        skeleton: List[Dict[str, Any]] = []
         for block in blocks:
-            if block.type == 'header':
-                skeleton.append({
-                    'id': block.id,
-                    'text': block.text,
-                    'original_level': block.level,
-                })
+            if block.type == "header":
+                skeleton.append(
+                    {
+                        "id": block.id,
+                        "text": block.text,
+                        "original_level": block.level,
+                    }
+                )
         return skeleton
-    
+
     def _llm_repair(self, skeleton: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Use LLM to repair header levels
-        
-        Args:
-            skeleton: List of header information
-            
-        Returns:
-            List of headers with corrected levels
-        """
-        # Prepare prompt
-        skeleton_text = '\n'.join([
-            f"{i+1}. {item['text']}"
-            for i, item in enumerate(skeleton)
-        ])
-        
-        prompt = f"""You are analyzing a document's table of contents. The following is a list of headers extracted from a document, but their hierarchy levels (H1, H2, H3, H4) are missing or incorrect.
+        """调用 LLM 为每个标题标注层级（level=1..4）。"""
+        skeleton_text = "\n".join([f"{i}. {item['text']}" for i, item in enumerate(skeleton)])
 
-Please analyze the numbering logic (e.g., "1." vs "1.1" vs "1.1.1") and semantic logic (e.g., "Introduction" is typically H1, "Background" might be H2) to assign the correct Markdown hierarchy level to each header.
+        prompt = f"""你在分析一份文档的目录结构。下面是从 PDF 中抽取出的标题列表，但其层级（H1/H2/H3/H4）缺失或不准确。
 
-Headers:
+请根据编号规律（例如 1 vs 1.1 vs 1.1.1）和语义规律（例如 Introduction 通常是顶层）为每一行分配正确层级。
+
+标题列表（index 从 0 开始）：
 {skeleton_text}
 
-Rules:
-- H1 (level=1): Main chapters or top-level sections (e.g., "1. Introduction", "Chapter 1")
-- H2 (level=2): Sections within chapters (e.g., "1.1 Background", "Section A")
-- H3 (level=3): Subsections (e.g., "1.1.1 Related Work", "Subsection A.1")
-- H4 (level=4): Sub-subsections (e.g., "1.1.1.1 Details")
+规则：
+- level=1：顶层章节/主章
+- level=2：章节内小节
+- level=3：子小节
+- level=4：更深层子小节
 
-Return a JSON array with each header's index (0-based) and its corrected level:
-[
-  {{"index": 0, "level": 1}},
-  {{"index": 1, "level": 2}},
-  ...
-]
+输出要求：
+- 只返回 JSON 数组，不要解释，不要 Markdown 代码块。
+- 数组元素格式为：{{"index": 0, "level": 1}}
 
-JSON:"""
+JSON："""
 
         try:
-            if self.config.provider == "openai":
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": "You are a document structure analysis expert. Return only valid JSON."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=self.config.temperature,
-                    max_tokens=2000,
-                )
-                result_text = response.choices[0].message.content.strip()
-            else:  # anthropic
-                response = self.client.messages.create(
-                    model=self.model,
-                    max_tokens=2000,
-                    temperature=self.config.temperature,
-                    messages=[
-                        {"role": "user", "content": prompt}
-                    ]
-                )
-                result_text = response.content[0].text.strip()
-            
-            # Parse JSON response
-            # Extract JSON from markdown code blocks if present
-            if '```json' in result_text:
-                result_text = result_text.split('```json')[1].split('```')[0].strip()
-            elif '```' in result_text:
-                result_text = result_text.split('```')[1].split('```')[0].strip()
-            
+            response = self.client.chat.completions.create(
+                model=self.config.model,
+                messages=[
+                    {"role": "system", "content": "你是文档结构分析专家，只返回合法 JSON。"},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=self.config.temperature,
+                max_tokens=min(2000, self.config.max_tokens),
+            )
+            result_text = (response.choices[0].message.content or "").strip()
+            result_text = self._strip_code_fences(result_text)
             corrected_levels = json.loads(result_text)
-            
-            # Apply corrected levels to skeleton
+
             for item in corrected_levels:
-                idx = item['index']
-                level = item['level']
-                if 0 <= idx < len(skeleton):
-                    skeleton[idx]['corrected_level'] = level
-            
+                idx = int(item.get("index", -1))
+                level = int(item.get("level", 0))
+                if 0 <= idx < len(skeleton) and 1 <= level <= 4:
+                    skeleton[idx]["corrected_level"] = level
+
+            # 若部分缺失，继续用兜底补齐
+            for item in skeleton:
+                if "corrected_level" not in item:
+                    item["corrected_level"] = item.get("original_level") or self._infer_level(item["text"])
+
             return skeleton
-            
+
         except json.JSONDecodeError as e:
             print(f"  Warning: Failed to parse LLM response as JSON: {e}")
             print("  Using original levels as fallback")
             for item in skeleton:
-                item['corrected_level'] = item.get('original_level') or self._infer_level(item['text'])
+                item["corrected_level"] = item.get("original_level") or self._infer_level(item["text"])
             return skeleton
         except Exception as e:
             print(f"  Warning: LLM hierarchy repair failed: {type(e).__name__}: {e}")
             print("  Using original levels as fallback")
             for item in skeleton:
-                item['corrected_level'] = item.get('original_level') or self._infer_level(item['text'])
+                item["corrected_level"] = item.get("original_level") or self._infer_level(item["text"])
             return skeleton
-    
-    def _infer_level(self, text: str) -> int:
-        """Infer header level from text patterns
-        
-        Args:
-            text: Header text
-            
-        Returns:
-            Inferred level (1-4)
-        """
-        import re
-        
-        # Pattern matching for common heading formats
-        if re.match(r'^(Chapter|第[一二三四五六七八九十\d]+章)', text, re.IGNORECASE):
+
+    @staticmethod
+    def _strip_code_fences(text: str) -> str:
+        """去掉可能出现的 Markdown 代码块包裹。"""
+        if "```" not in text:
+            return text
+        # 优先 ```json
+        if "```json" in text:
+            return text.split("```json", 1)[1].split("```", 1)[0].strip()
+        return text.split("```", 1)[1].split("```", 1)[0].strip()
+
+    @staticmethod
+    def _infer_level(text: str) -> int:
+        """规则兜底：从文本模式推断标题层级（1-4）。"""
+        if re.match(r"^(Chapter|第[一二三四五六七八九十\\d]+章)", text, re.IGNORECASE):
             return 1
-        elif re.match(r'^\d+\.\s', text):  # "1. Introduction"
+        if re.match(r"^\\d+\\.\\s", text):  # "1. Introduction"
             return 2
-        elif re.match(r'^\d+\.\d+\s', text):  # "1.1 Background"
+        if re.match(r"^\\d+\\.\\d+\\s", text):  # "1.1 Background"
             return 3
-        elif re.match(r'^\d+\.\d+\.\d+\s', text):  # "1.1.1 Details"
+        if re.match(r"^\\d+\\.\\d+\\.\\d+\\s", text):  # "1.1.1 Details"
             return 4
-        else:
-            # Default to level 2 for unrecognized patterns
-            return 2
-    
-    def _write_back_levels(
-        self,
-        blocks: List[Block],
-        corrected_skeleton: List[Dict[str, Any]]
-    ) -> List[Block]:
-        """Write corrected levels back to blocks
-        
-        Args:
-            blocks: Original blocks
-            corrected_skeleton: Skeleton with corrected levels
-            
-        Returns:
-            Blocks with updated levels
-        """
-        # Create mapping from block ID to corrected level
+        return 2
+
+    @staticmethod
+    def _write_back_levels(blocks: List[Block], corrected_skeleton: List[Dict[str, Any]]) -> List[Block]:
+        """把修复后的 level 回填到 blocks。"""
         level_map = {
-            item['id']: item.get('corrected_level', item.get('original_level', 1))
-            for item in corrected_skeleton
+            item["id"]: item.get("corrected_level", item.get("original_level", 1)) for item in corrected_skeleton
         }
-        
-        # Update blocks
-        updated_blocks = []
+
+        updated: List[Block] = []
         for block in blocks:
             if block.id in level_map:
-                # Create new block with updated level
                 block_dict = block.model_dump()
-                block_dict['level'] = level_map[block.id]
+                block_dict["level"] = level_map[block.id]
                 block = Block(**block_dict)
-            updated_blocks.append(block)
-        
-        return updated_blocks
+            updated.append(block)
+
+        return updated
+

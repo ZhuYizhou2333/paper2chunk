@@ -1,4 +1,9 @@
-"""Semantic chunking using dual-threshold recursive DFS"""
+"""语义分片：双阈值递归 DFS
+
+说明：
+- 当叶子节点超过 hard_limit 时，可选调用 LLM 做语义拆分。
+- LLM 调用统一使用 OpenAI 官方 Python SDK，并可通过 `base_url` 指向 OpenAI 兼容端点。
+"""
 
 from typing import List, Optional
 import uuid
@@ -62,16 +67,19 @@ class DualThresholdChunker:
             self.llm_client = None
     
     def _init_llm_client(self):
-        """Initialize LLM client for large chunk splitting"""
+        """初始化 LLM 客户端（用于超大叶子节点的语义拆分）"""
         try:
-            if self.llm_config.provider == "openai":
-                import openai
-                self.llm_client = openai.OpenAI(api_key=self.llm_config.openai_api_key)
-                self.llm_model = self.llm_config.openai_model
-            elif self.llm_config.provider == "anthropic":
-                import anthropic
-                self.llm_client = anthropic.Anthropic(api_key=self.llm_config.anthropic_api_key)
-                self.llm_model = self.llm_config.anthropic_model
+            if not self.llm_config or not self.llm_config.api_key:
+                self.llm_client = None
+                return
+
+            from openai import OpenAI
+
+            client_kwargs = {"api_key": self.llm_config.api_key}
+            if self.llm_config.base_url:
+                client_kwargs["base_url"] = self.llm_config.base_url
+            self.llm_client = OpenAI(**client_kwargs)
+            self.llm_model = self.llm_config.model
         except Exception as e:
             print(f"  Warning: Could not initialize LLM for chunk splitting: {e}")
             self.llm_client = None
@@ -301,28 +309,17 @@ Text:
 {content[:4000]}...
 
 JSON:"""
-            
-            if self.llm_config.provider == "openai":
-                response = self.llm_client.chat.completions.create(
-                    model=self.llm_model,
-                    messages=[
-                        {"role": "system", "content": "You are a text segmentation expert. Return only valid JSON."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.1,
-                    max_tokens=500,
-                )
-                result_text = response.choices[0].message.content.strip()
-            else:  # anthropic
-                response = self.llm_client.messages.create(
-                    model=self.llm_model,
-                    max_tokens=500,
-                    temperature=0.1,
-                    messages=[
-                        {"role": "user", "content": prompt}
-                    ]
-                )
-                result_text = response.content[0].text.strip()
+
+            response = self.llm_client.chat.completions.create(
+                model=self.llm_model,
+                messages=[
+                    {"role": "system", "content": "You are a text segmentation expert. Return only valid JSON."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.1,
+                max_tokens=500,
+            )
+            result_text = (response.choices[0].message.content or "").strip()
             
             # Parse split points
             import json
