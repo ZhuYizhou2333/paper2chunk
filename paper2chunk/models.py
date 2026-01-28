@@ -5,6 +5,44 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 
 
+class Block(BaseModel):
+    """A block from MinerU parsing"""
+    id: str = Field(description="Unique block ID")
+    type: str = Field(description="Block type: text, header, table, image, equation, etc.")
+    text: str = Field(default="", description="Text content of the block")
+    level: Optional[int] = Field(default=None, description="Header level (1-4) if type is header")
+    page: int = Field(description="Page number")
+    bbox: Optional[List[float]] = Field(default=None, description="Bounding box [x0, y0, x1, y1]")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+
+
+class TreeNode(BaseModel):
+    """A node in the document tree (AST)"""
+    id: str = Field(description="Node ID")
+    type: str = Field(description="Node type: root, section, content")
+    title: Optional[str] = Field(default=None, description="Section title for section nodes")
+    level: Optional[int] = Field(default=None, description="Section level")
+    content: str = Field(default="", description="Content for content nodes")
+    page_numbers: List[int] = Field(default_factory=list, description="Page numbers")
+    children: List["TreeNode"] = Field(default_factory=list, description="Child nodes")
+    
+    def get_total_tokens(self) -> int:
+        """Estimate total tokens in this node and its children using tiktoken"""
+        try:
+            import tiktoken
+            # Use cl100k_base encoding (GPT-4, GPT-3.5-turbo)
+            enc = tiktoken.get_encoding("cl100k_base")
+            token_count = len(enc.encode(self.content))
+        except (ImportError, Exception):
+            # Fallback to rough estimation if tiktoken not available
+            # 1 token ≈ 4 characters (conservative estimate)
+            token_count = len(self.content) // 4
+        
+        for child in self.children:
+            token_count += child.get_total_tokens()
+        return token_count
+
+
 class DocumentMetadata(BaseModel):
     """Metadata for a document"""
     title: str = Field(default="", description="Document title")
@@ -40,8 +78,10 @@ class Chunk(BaseModel):
 class Document(BaseModel):
     """A parsed document"""
     metadata: DocumentMetadata = Field(description="Document metadata")
-    raw_text: str = Field(description="Raw extracted text")
-    structured_content: List[Dict[str, Any]] = Field(default_factory=list, description="Structured content with sections")
+    raw_text: str = Field(default="", description="Raw extracted text")
+    blocks: List[Block] = Field(default_factory=list, description="Parsed blocks from MinerU")
+    tree: Optional[TreeNode] = Field(default=None, description="Document tree (AST)")
+    structured_content: List[Dict[str, Any]] = Field(default_factory=list, description="Structured content with sections (legacy)")
     images: List[Dict[str, Any]] = Field(default_factory=list, description="Extracted images and charts")
     chunks: List[Chunk] = Field(default_factory=list, description="Generated chunks")
 
@@ -57,3 +97,4 @@ class Section(BaseModel):
 
 # Update forward references
 Section.model_rebuild()
+TreeNode.model_rebuild()

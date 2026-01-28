@@ -8,6 +8,15 @@ import os
 load_dotenv()
 
 
+class MinerUConfig(BaseModel):
+    """MinerU API configuration"""
+    api_key: Optional[str] = Field(default=None, description="MinerU API key")
+    timeout: int = Field(default=300, ge=1, description="API timeout in seconds for file upload")
+    poll_interval: int = Field(default=5, ge=1, description="Polling interval in seconds for parsing results")
+    max_poll_attempts: int = Field(default=60, ge=1, description="Maximum polling attempts (total wait time = poll_interval * max_poll_attempts)")
+    api_base_url: str = Field(default="https://mineru.net", description="MinerU API base URL")
+
+
 class LLMConfig(BaseModel):
     """LLM configuration"""
     provider: str = Field(default="openai", description="LLM provider (openai or anthropic)")
@@ -21,9 +30,8 @@ class LLMConfig(BaseModel):
 
 class ChunkingConfig(BaseModel):
     """Chunking configuration"""
-    max_chunk_size: int = Field(default=1000, description="Maximum chunk size in characters")
-    min_chunk_size: int = Field(default=100, description="Minimum chunk size in characters")
-    overlap_size: int = Field(default=50, description="Overlap size between chunks")
+    soft_limit: int = Field(default=800, description="Optimal chunk size in tokens")
+    hard_limit: int = Field(default=2000, description="Maximum chunk size in tokens")
     preserve_structure: bool = Field(default=True, description="Preserve document structure")
 
 
@@ -36,6 +44,7 @@ class FeatureConfig(BaseModel):
 
 class Config(BaseModel):
     """Main configuration class"""
+    mineru: MinerUConfig = Field(default_factory=MinerUConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
     features: FeatureConfig = Field(default_factory=FeatureConfig)
@@ -43,18 +52,25 @@ class Config(BaseModel):
     @classmethod
     def from_env(cls) -> "Config":
         """Load configuration from environment variables"""
+        mineru_config = MinerUConfig(
+            api_key=os.getenv("MINERU_API_KEY"),
+            timeout=cls._parse_int_env("MINERU_TIMEOUT", 300),
+            poll_interval=cls._parse_int_env("MINERU_POLL_INTERVAL", 5),
+            max_poll_attempts=cls._parse_int_env("MINERU_MAX_POLL_ATTEMPTS", 60),
+            api_base_url=os.getenv("MINERU_API_BASE_URL", "https://mineru.net"),
+        )
+        
         llm_config = LLMConfig(
             provider=os.getenv("LLM_PROVIDER", "openai"),
             openai_api_key=os.getenv("OPENAI_API_KEY"),
-            openai_model=os.getenv("OPENAI_MODEL", "gpt-4"),
+            openai_model=os.getenv("OPENAI_MODEL", "gpt-4o"),
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
             anthropic_model=os.getenv("ANTHROPIC_MODEL", "claude-3-opus-20240229"),
         )
         
         chunking_config = ChunkingConfig(
-            max_chunk_size=int(os.getenv("MAX_CHUNK_SIZE", "1000")),
-            min_chunk_size=int(os.getenv("MIN_CHUNK_SIZE", "100")),
-            overlap_size=int(os.getenv("OVERLAP_SIZE", "50")),
+            soft_limit=cls._parse_int_env("CHUNK_SOFT_LIMIT", 800),
+            hard_limit=cls._parse_int_env("CHUNK_HARD_LIMIT", 2000),
         )
         
         features_config = FeatureConfig(
@@ -63,7 +79,29 @@ class Config(BaseModel):
         )
         
         return cls(
+            mineru=mineru_config,
             llm=llm_config,
             chunking=chunking_config,
             features=features_config,
         )
+    
+    @staticmethod
+    def _parse_int_env(key: str, default: int) -> int:
+        """Parse integer from environment variable with error handling
+        
+        Args:
+            key: Environment variable key
+            default: Default value if not set or invalid
+            
+        Returns:
+            Parsed integer value
+        """
+        value = os.getenv(key)
+        if value is None:
+            return default
+        
+        try:
+            return int(value)
+        except ValueError:
+            print(f"Warning: Invalid integer value for {key}='{value}', using default {default}")
+            return default

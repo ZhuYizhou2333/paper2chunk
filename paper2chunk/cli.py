@@ -4,6 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 from paper2chunk.pipeline import Paper2ChunkPipeline
+from paper2chunk.pipeline_legacy import Paper2ChunkLegacyPipeline
 from paper2chunk.config import Config
 
 
@@ -14,8 +15,11 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Basic usage
+  # Default: Use MinerU-based pipeline
   paper2chunk input.pdf -o output.json
+  
+  # Use legacy PyMuPDF-based pipeline
+  paper2chunk input.pdf -o output.json --legacy
   
   # Specify output format
   paper2chunk input.pdf -o output.json --format lightrag
@@ -27,6 +31,10 @@ Examples:
   paper2chunk input.pdf -o output.json --no-charts
   
 Supported formats: lightrag, langchain, markdown, json
+
+Pipelines:
+  default: 4-layer architecture (MinerU + LLM hierarchy repair + AST + dual-threshold DFS)
+  --legacy: Legacy pipeline (PyMuPDF + simple chunking)
         """
     )
     
@@ -52,6 +60,12 @@ Supported formats: lightrag, langchain, markdown, json
     )
     
     parser.add_argument(
+        "--legacy",
+        action="store_true",
+        help="Use legacy PyMuPDF-based pipeline instead of default MinerU pipeline"
+    )
+    
+    parser.add_argument(
         "--no-enhancement",
         action="store_true",
         help="Disable LLM-based semantic enhancement"
@@ -70,21 +84,34 @@ Supported formats: lightrag, langchain, markdown, json
     )
     
     parser.add_argument(
+        "--soft-limit",
+        type=int,
+        help="Soft limit for chunk size in tokens (default pipeline only)"
+    )
+    
+    parser.add_argument(
+        "--hard-limit",
+        type=int,
+        help="Hard limit for chunk size in tokens (default pipeline only)"
+    )
+    
+    # Legacy pipeline options
+    parser.add_argument(
         "--max-chunk-size",
         type=int,
-        help="Maximum chunk size in characters"
+        help="Maximum chunk size in characters (legacy pipeline only)"
     )
     
     parser.add_argument(
         "--min-chunk-size",
         type=int,
-        help="Minimum chunk size in characters"
+        help="Minimum chunk size in characters (legacy pipeline only)"
     )
     
     parser.add_argument(
         "--overlap",
         type=int,
-        help="Overlap size between chunks"
+        help="Overlap size between chunks (legacy pipeline only)"
     )
     
     args = parser.parse_args()
@@ -112,14 +139,18 @@ Supported formats: lightrag, langchain, markdown, json
     if args.no_metadata:
         config.features.enable_metadata_injection = False
     
-    if args.max_chunk_size:
-        config.chunking.max_chunk_size = args.max_chunk_size
+    # Default pipeline options
+    if args.soft_limit:
+        config.chunking.soft_limit = args.soft_limit
     
-    if args.min_chunk_size:
-        config.chunking.min_chunk_size = args.min_chunk_size
+    if args.hard_limit:
+        config.chunking.hard_limit = args.hard_limit
     
-    if args.overlap:
-        config.chunking.overlap_size = args.overlap
+    # Legacy pipeline options - warn if used with default pipeline
+    if not args.legacy and (args.max_chunk_size or args.min_chunk_size or args.overlap):
+        print("Warning: --max-chunk-size, --min-chunk-size, and --overlap are only used with --legacy")
+        print("         Use --soft-limit and --hard-limit for the default pipeline")
+        print()
     
     # Run pipeline
     try:
@@ -128,7 +159,19 @@ Supported formats: lightrag, langchain, markdown, json
         print("=" * 60)
         print()
         
-        pipeline = Paper2ChunkPipeline(config)
+        if args.legacy:
+            print("Using: Legacy Pipeline (PyMuPDF)")
+            print()
+            pipeline = Paper2ChunkLegacyPipeline(config)
+        else:
+            print("Using: 4-Layer Pipeline")
+            print("  1. MinerU Visual Extraction")
+            print("  2. LLM TOC Hierarchy Repair")
+            print("  3. AST Construction")
+            print("  4. Dual-Threshold DFS Chunking")
+            print()
+            pipeline = Paper2ChunkPipeline(config)
+        
         document = pipeline.process(str(input_path))
         pipeline.save_output(document, args.output, args.format)
         

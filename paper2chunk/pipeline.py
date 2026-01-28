@@ -1,12 +1,14 @@
-"""Main pipeline for paper2chunk"""
+"""Main pipeline using the 4-layer architecture"""
 
 from typing import Optional, List
 from pathlib import Path
 from paper2chunk.config import Config
 from paper2chunk.core import (
-    PDFParser,
+    MinerUParser,
+    LogicRepairer,
+    TreeBuilder,
+    DualThresholdChunker,
     LLMRewriter,
-    SemanticChunker,
     MetadataInjector,
     ChartAnalyzer,
 )
@@ -20,41 +22,80 @@ from paper2chunk.output_formatters import (
 
 
 class Paper2ChunkPipeline:
-    """Main pipeline for converting PDFs to RAG-friendly chunks"""
+    """Main pipeline using 4-layer architecture:
+    
+    1. Parsing Layer (MinerU): Visual extraction with layout analysis
+    2. Logic Layer (LLM): TOC hierarchy repair
+    3. Modeling Layer (Tree Builder): AST construction
+    4. Slicing Layer (Dual-threshold DFS): RAG chunk generation
+    """
     
     def __init__(self, config: Optional[Config] = None):
         """Initialize the pipeline
         
         Args:
             config: Configuration object. If None, loads from environment.
+            
+        Raises:
+            ValueError: If required configuration is missing
         """
         self.config = config or Config.from_env()
         
+        # Validate required configuration
+        if not self.config.mineru.api_key:
+            raise ValueError(
+                "MinerU API key is required.\n"
+                "Please set MINERU_API_KEY in your .env file or environment.\n"
+                "Get your API key from: https://mineru.net/"
+            )
+        
+        if not (self.config.llm.openai_api_key or self.config.llm.anthropic_api_key):
+            raise ValueError(
+                "LLM API key is required for the pipeline.\n"
+                "Please set OPENAI_API_KEY or ANTHROPIC_API_KEY in your .env file."
+            )
+        
         # Initialize components
-        self.pdf_parser = PDFParser()
-        self.semantic_chunker = SemanticChunker(self.config.chunking)
-        self.metadata_injector = MetadataInjector()
-        
-        # Initialize LLM-dependent components only if needed
-        self.llm_rewriter = None
-        self.chart_analyzer = None
-        
-        if self.config.features.enable_semantic_enhancement:
-            try:
-                self.llm_rewriter = LLMRewriter(self.config.llm)
-            except Exception as e:
-                print(f"Warning: Could not initialize LLM rewriter: {e}")
-                print("Semantic enhancement will be disabled.")
-        
-        if self.config.features.enable_chart_to_text:
-            try:
-                self.chart_analyzer = ChartAnalyzer(self.config.llm)
-            except Exception as e:
-                print(f"Warning: Could not initialize chart analyzer: {e}")
-                print("Chart-to-text conversion will be disabled.")
+        try:
+            # Layer 1: Parsing (MinerU)
+            self.parser = MinerUParser(self.config.mineru)
+            
+            # Layer 2: Logic Repair (LLM)
+            self.logic_repairer = LogicRepairer(self.config.llm)
+            
+            # Layer 3: Tree Builder
+            self.tree_builder = TreeBuilder()
+            
+            # Layer 4: Dual-threshold Chunker
+            self.chunker = DualThresholdChunker(
+                self.config.chunking,
+                self.config.llm if self.config.features.enable_semantic_enhancement else None
+            )
+            
+            # Optional: Metadata Injector
+            self.metadata_injector = MetadataInjector()
+            
+            # Optional: LLM Rewriter for semantic enhancement
+            self.llm_rewriter = None
+            if self.config.features.enable_semantic_enhancement:
+                try:
+                    self.llm_rewriter = LLMRewriter(self.config.llm)
+                except Exception as e:
+                    print(f"Warning: Could not initialize LLM rewriter: {e}")
+            
+            # Optional: Chart Analyzer
+            self.chart_analyzer = None
+            if self.config.features.enable_chart_to_text:
+                try:
+                    self.chart_analyzer = ChartAnalyzer(self.config.llm)
+                except Exception as e:
+                    print(f"Warning: Could not initialize chart analyzer: {e}")
+                    
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize pipeline: {e}")
     
     def process(self, pdf_path: str) -> Document:
-        """Process a PDF file through the complete pipeline
+        """Process a PDF file through the 4-layer pipeline
         
         Args:
             pdf_path: Path to the PDF file
@@ -62,53 +103,82 @@ class Paper2ChunkPipeline:
         Returns:
             Processed document with chunks
         """
-        print(f"Processing PDF: {pdf_path}")
+        print(f"\n{'='*60}")
+        print(f"Processing PDF with 4-Layer Architecture")
+        print(f"{'='*60}\n")
+        print(f"Input: {pdf_path}\n")
         
-        # Step 1: Parse PDF
-        print("Step 1/5: Parsing PDF...")
-        document = self.pdf_parser.parse(pdf_path)
-        print(f"  ✓ Extracted {len(document.raw_text)} characters from {document.metadata.total_pages} pages")
+        # Layer 1: Parsing (MinerU)
+        print("【Layer 1/4】Parsing Layer - MinerU Visual Extraction")
+        document = self.parser.parse(pdf_path)
+        print(f"  ✓ Extracted {len(document.blocks)} blocks")
+        print(f"  ✓ Document: {document.metadata.title}")
+        print(f"  ✓ Pages: {document.metadata.total_pages}\n")
         
-        # Step 2: Analyze charts (optional)
+        # Layer 2: Logic Repair (LLM)
+        print("【Layer 2/4】Logic Layer - LLM TOC Hierarchy Repair")
+        document.blocks = self.logic_repairer.repair_hierarchy(document.blocks)
+        print()
+        
+        # Layer 3: Tree Building (AST)
+        print("【Layer 3/4】Modeling Layer - AST Construction")
+        document.tree = self.tree_builder.build_tree(document.blocks)
+        print()
+        
+        # Layer 4: Slicing (Dual-threshold DFS)
+        print("【Layer 4/4】Slicing Layer - Dual-Threshold Recursive DFS")
+        chunks = self.chunker.chunk_tree(
+            document.tree,
+            document.metadata.title,
+            document.metadata.publish_date
+        )
+        print()
+        
+        # Optional: Inject metadata
+        if self.config.features.enable_metadata_injection:
+            print("【Optional】Injecting metadata into chunks...")
+            chunks = self.metadata_injector.inject_metadata(chunks)
+            print(f"  ✓ Metadata injected\n")
+        
+        # Optional: LLM enhancement
+        if self.llm_rewriter and self.config.features.enable_semantic_enhancement:
+            print("【Optional】Enhancing chunks with LLM...")
+            chunks = self._enhance_chunks(chunks, document.metadata.title)
+            print()
+        
+        # Optional: Chart analysis
         if self.chart_analyzer and self.config.features.enable_chart_to_text:
-            print("Step 2/5: Analyzing charts and images...")
+            print("【Optional】Analyzing charts and images...")
             chart_descriptions = self.chart_analyzer.analyze_images_in_document(
                 document.images,
                 document.metadata.title
             )
-            print(f"  ✓ Analyzed {len(chart_descriptions)} images")
-        else:
-            print("Step 2/5: Skipping chart analysis (disabled or unavailable)")
-        
-        # Step 3: Semantic chunking
-        print("Step 3/5: Creating semantic chunks...")
-        chunks = self.semantic_chunker.chunk_document(document)
-        print(f"  ✓ Created {len(chunks)} semantic chunks")
-        
-        # Step 4: Inject metadata
-        if self.config.features.enable_metadata_injection:
-            print("Step 4/5: Injecting metadata...")
-            chunks = self.metadata_injector.inject_metadata(chunks)
-            print(f"  ✓ Metadata injected into all chunks")
-        else:
-            print("Step 4/5: Skipping metadata injection (disabled)")
-        
-        # Step 5: LLM enhancement (optional)
-        if self.llm_rewriter and self.config.features.enable_semantic_enhancement:
-            print("Step 5/5: Enhancing chunks with LLM...")
-            chunks = self._enhance_chunks(chunks, document.metadata.title)
-            print(f"  ✓ Enhanced all chunks with semantic context")
-        else:
-            print("Step 5/5: Skipping LLM enhancement (disabled or unavailable)")
+            print(f"  ✓ Analyzed {len(chart_descriptions)} images\n")
         
         # Update document with chunks
         document.chunks = chunks
         
-        print(f"\n✅ Processing complete! Generated {len(chunks)} chunks.")
+        print(f"{'='*60}")
+        print(f"✅ Processing Complete!")
+        print(f"{'='*60}")
+        print(f"Generated {len(chunks)} semantic chunks")
+        if chunks:
+            avg_size = sum(len(c.content) for c in chunks) // len(chunks)
+            print(f"Average chunk size: {avg_size} characters")
+        print(f"{'='*60}\n")
+        
         return document
     
     def _enhance_chunks(self, chunks: List[Chunk], document_title: str) -> List[Chunk]:
-        """Enhance chunks with LLM"""
+        """Enhance chunks with LLM
+        
+        Args:
+            chunks: List of chunks
+            document_title: Document title
+            
+        Returns:
+            Enhanced chunks
+        """
         enhanced_chunks = []
         
         for i, chunk in enumerate(chunks):
@@ -134,7 +204,7 @@ class Paper2ChunkPipeline:
             
             enhanced_chunks.append(chunk)
         
-        print()  # New line after progress
+        print(f"  ✓ Enhanced {len(chunks)} chunks" + " " * 20)
         return enhanced_chunks
     
     def save_output(
@@ -164,11 +234,11 @@ class Paper2ChunkPipeline:
         if not formatter:
             raise ValueError(f"Unsupported format: {format}")
         
-        print(f"\nSaving output to {output_path} (format: {format})...")
+        print(f"Saving output to {output_path} (format: {format})...")
         
         if format == "markdown":
             formatter.to_file(document.chunks, str(output_path))
         else:
             formatter.to_json(document.chunks, str(output_path))
         
-        print(f"✅ Output saved successfully!")
+        print(f"✅ Output saved successfully!\n")
