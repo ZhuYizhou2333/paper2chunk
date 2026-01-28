@@ -1,18 +1,18 @@
 """
-Example script demonstrating the new SOTA 4-layer pipeline
+Example script demonstrating the 4-layer pipeline
 
-This example shows how to use the new Paper2ChunkSOTAPipeline which implements:
+This example shows how to use the Paper2ChunkPipeline which implements:
 1. MinerU Visual Extraction (parsing layer)
 2. LLM TOC Hierarchy Repair (logic layer)
 3. AST Construction (modeling layer)
 4. Dual-Threshold DFS Chunking (slicing layer)
 """
 
-from paper2chunk import Paper2ChunkSOTAPipeline
+from paper2chunk import Paper2ChunkPipeline
 from paper2chunk.config import Config
 
 def main():
-    """Run SOTA pipeline example"""
+    """Run pipeline example"""
     
     # Check if example PDF exists
     import os
@@ -21,11 +21,11 @@ def main():
     if not os.path.exists(pdf_path):
         print(f"❌ Error: PDF file not found: {pdf_path}")
         print("\nTo run this example:")
-        print("1. Set MINERU_API_KEY in .env file (get from https://mineru.cn/)")
+        print("1. Set MINERU_API_KEY in .env file (get from https://mineru.net/)")
         print("2. Set OPENAI_API_KEY or ANTHROPIC_API_KEY in .env file")
         print("3. Replace 'example.pdf' with path to your PDF file")
         print("\nExample:")
-        print("  python sota_pipeline_example.py")
+        print("  python pipeline_example.py")
         return
     
     # Load configuration from environment
@@ -38,9 +38,9 @@ def main():
     config.features.enable_metadata_injection = True
     
     try:
-        # Initialize SOTA pipeline (will validate API keys)
-        pipeline = Paper2ChunkSOTAPipeline(config)
-        print("Starting SOTA pipeline processing...")
+        # Initialize pipeline (will validate API keys)
+        pipeline = Paper2ChunkPipeline(config)
+        print("Starting pipeline processing...")
         print()
         
         # Process the document

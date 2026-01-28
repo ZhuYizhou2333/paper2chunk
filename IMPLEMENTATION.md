@@ -1,8 +1,8 @@
-# SOTA 4-Layer Architecture Implementation Summary
+# 4-Layer Architecture Implementation Summary
 
 ## 概述 (Overview)
 
-本次重构完全按照 issue 要求，基于**行业 SOTA 方法**重新构建了文档解析层，引入了全新的 4 层架构。原有的解析层被保留作为向后兼容的传统管道，新的 SOTA 管道提供了更精确、更智能的文档处理能力。
+本次重构完全按照 issue 要求，基于**行业 方法**重新构建了文档解析层，引入了全新的 4 层架构。原有的解析层被保留作为向后兼容的传统管道，新的 管道提供了更精确、更智能的文档处理能力。
 
 ## 🏗️ 新架构详解
 
@@ -189,7 +189,7 @@ output.json (RAG-ready chunks)
 ### 命令行
 
 ```bash
-# 使用新 SOTA 管道
+# 使用新 管道
 paper2chunk input.pdf -o output.json --sota
 
 # 自定义参数
@@ -302,7 +302,7 @@ MINERU_TIMEOUT=300
 
 ## 📈 性能特点
 
-| 特性 | SOTA 管道 | 传统管道 |
+| 特性 | 管道 | 传统管道 |
 |-----|----------|---------|
 | 版面识别 | ⭐⭐⭐⭐⭐ 视觉 AI | ⭐⭐⭐ 启发式 |
 | 层级准确性 | ⭐⭐⭐⭐⭐ LLM 修复 | ⭐⭐ 字体大小 |
@@ -328,7 +328,7 @@ MINERU_TIMEOUT=300
 - `paper2chunk/core/logic_repair.py` - LLM 层级修复
 - `paper2chunk/core/tree_builder.py` - AST 构建器
 - `paper2chunk/core/semantic_chunker_new.py` - 双阈值分片器
-- `paper2chunk/pipeline_sota.py` - SOTA 管道
+- `paper2chunk/pipeline_sota.py` - 管道
 
 ### 更新模块
 - `paper2chunk/models.py` - 新增 Block, TreeNode 模型
@@ -342,7 +342,7 @@ MINERU_TIMEOUT=300
 - `SOTA_IMPLEMENTATION.md` - 本文档
 
 ### 示例
-- `examples/sota_pipeline_example.py` - SOTA 管道示例
+- `examples/pipeline_example.py` - 管道示例
 
 ### 依赖
 - `requirements.txt` - 新增 requests, tiktoken
@@ -361,7 +361,7 @@ MINERU_TIMEOUT=300
 
 ## 🎓 适用场景
 
-**推荐使用 SOTA 管道**:
+**推荐使用 管道**:
 - 📄 复杂的学术论文
 - 📊 金融研究报告
 - 📚 技术文档
@@ -376,7 +376,7 @@ MINERU_TIMEOUT=300
 
 ## 🙏 致谢
 
-- **MinerU (Magic-PDF)**: 提供 SOTA PDF 视觉解析能力
+- **MinerU (Magic-PDF)**: 提供 PDF 视觉解析能力
 - **OpenAI GPT-4o**: 提供层级修复和语义拆解
 - **tiktoken**: 提供精确的 token 计数
 - **Issue 提出者**: 提供清晰的需求和架构指导

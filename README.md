@@ -7,11 +7,11 @@
 
 paper2chunk 是一个专为 RAG（检索增强生成）系统设计的 PDF 文档处理工具。它的核心目标是解决 RAG 系统中的**"碎片化语义丢失"**问题，将非结构化的 PDF 转化为**语义完整、结构清晰、元数据丰富**的原子化分片（Chunks）。
 
-## 🆕 重大更新：SOTA 4层架构
+## 🆕 重大更新：4层架构
 
-本版本引入了基于**行业 SOTA 方法**的全新 4 层架构：
+本版本引入了基于**行业 先进方法**的全新 4 层架构：
 
-### 🏗️ SOTA 架构概览
+### 🏗️ 架构概览
 
 整个处理流程是一个从"无序"到"有序"，从"物理视界"到"逻辑语义"的升维过程。
 
@@ -80,7 +80,7 @@ cp .env.example .env
 # 编辑 .env 文件，添加你的 API 密钥
 ```
 
-**必需配置（SOTA 管道）：**
+**必需配置（默认管道）：**
 ```bash
 # MinerU API 配置（Magic-PDF）
 # 获取 API 密钥: https://mineru.net/
@@ -109,25 +109,25 @@ CHUNK_HARD_LIMIT=2000
 
 ### 命令行使用
 
-#### 使用新 SOTA 管道（推荐）
+#### 使用新 默认管道（推荐）
 ```bash
 # 基本用法
-paper2chunk input.pdf -o output.json --sota
+paper2chunk input.pdf -o output.json 
 
 # 指定输出格式
-paper2chunk input.pdf -o output.json --format lightrag --sota
+paper2chunk input.pdf -o output.json --format lightrag 
 
 # 输出为 Markdown
-paper2chunk input.pdf -o output.md --format markdown --sota
+paper2chunk input.pdf -o output.md --format markdown 
 
 # 禁用 LLM 增强（更快，但语义丰富度降低）
-paper2chunk input.pdf -o output.json --no-enhancement --sota
+paper2chunk input.pdf -o output.json --no-enhancement 
 
 # 自定义分片参数
-paper2chunk input.pdf -o output.json --soft-limit 1000 --hard-limit 2500 --sota
+paper2chunk input.pdf -o output.json --soft-limit 1000 --hard-limit 2500 
 ```
 
-#### 使用传统管道（向后兼容）
+#### 使用传统管道（--legacy）（向后兼容）
 ```bash
 # 基本用法（使用 PyMuPDF）
 paper2chunk input.pdf -o output.json
@@ -138,11 +138,11 @@ paper2chunk input.pdf -o output.json --max-chunk-size 1500 --overlap 100
 
 ### Python API 使用
 
-#### SOTA 管道
+#### 默认管道
 ```python
 from paper2chunk import Paper2ChunkSOTAPipeline
 
-# 初始化 SOTA 管道
+# 初始化 默认管道
 pipeline = Paper2ChunkSOTAPipeline()
 
 # 处理 PDF
@@ -211,7 +211,7 @@ document = pipeline.process("example.pdf")
 
 ## 🏗️ 架构对比
 
-### SOTA 管道（新）
+### 默认管道（新）
 ```
 PDF Input
     ↓
@@ -253,7 +253,7 @@ RAG-ready Chunks
 
 ## ⚙️ 配置选项
 
-### SOTA 管道配置
+### 默认管道配置
 - `soft_limit`: 软限制，最佳分片大小（token 数），默认 800
 - `hard_limit`: 硬限制，最大分片大小（token 数），默认 2000
 - `preserve_structure`: 保持文档结构，默认 true
@@ -282,10 +282,10 @@ RAG-ready Chunks
 4. **法律文件处理**：保持法律文件的章节结构和引用关系
 5. **知识库构建**：为企业知识库系统准备高质量的文档片段
 
-## 🔬 SOTA 管道优势
+## 🔬 默认管道优势
 
 ### vs 传统方法
-| 特性 | SOTA 管道 | 传统管道 | 简单切片 |
+| 特性 | 默认管道 | 传统管道 | 简单切片 |
 |-----|----------|---------|---------|
 | 版面分析 | ✅ 视觉 AI | ⚠️ 启发式 | ❌ 无 |
 | 层级识别 | ✅ LLM 修复 | ⚠️ 字体大小 | ❌ 无 |

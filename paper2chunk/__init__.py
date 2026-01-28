@@ -11,8 +11,8 @@ This package provides tools to:
 - Output in RAG-friendly formats (LightRAG, LangChain)
 
 Two pipelines available:
-- Paper2ChunkSOTAPipeline: New 4-layer SOTA architecture
-- Paper2ChunkPipeline: Legacy pipeline (backward compatibility)
+- Paper2ChunkPipeline: Main 4-layer architecture (MinerU-based)
+- Paper2ChunkLegacyPipeline: Legacy pipeline using PyMuPDF (backward compatibility)
 """
 
 __version__ = "0.1.0"
@@ -28,7 +28,7 @@ from paper2chunk.core.semantic_chunker import SemanticChunker
 from paper2chunk.core.metadata_injector import MetadataInjector
 from paper2chunk.core.chart_analyzer import ChartAnalyzer
 from paper2chunk.pipeline import Paper2ChunkPipeline
-from paper2chunk.pipeline_sota import Paper2ChunkSOTAPipeline
+from paper2chunk.pipeline_legacy import Paper2ChunkLegacyPipeline
 
 __all__ = [
     "PDFParser",
@@ -41,5 +41,5 @@ __all__ = [
     "MetadataInjector",
     "ChartAnalyzer",
     "Paper2ChunkPipeline",
-    "Paper2ChunkSOTAPipeline",
+    "Paper2ChunkLegacyPipeline",
 ]

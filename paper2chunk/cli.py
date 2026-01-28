@@ -4,7 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 from paper2chunk.pipeline import Paper2ChunkPipeline
-from paper2chunk.pipeline_sota import Paper2ChunkSOTAPipeline
+from paper2chunk.pipeline_legacy import Paper2ChunkLegacyPipeline
 from paper2chunk.config import Config
 
 
@@ -15,14 +15,14 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Use new SOTA pipeline (recommended)
-  paper2chunk input.pdf -o output.json --sota
-  
-  # Use legacy pipeline
+  # Default: Use MinerU-based pipeline
   paper2chunk input.pdf -o output.json
   
+  # Use legacy PyMuPDF-based pipeline
+  paper2chunk input.pdf -o output.json --legacy
+  
   # Specify output format
-  paper2chunk input.pdf -o output.json --format lightrag --sota
+  paper2chunk input.pdf -o output.json --format lightrag
   
   # Disable LLM enhancement
   paper2chunk input.pdf -o output.json --no-enhancement
@@ -33,8 +33,8 @@ Examples:
 Supported formats: lightrag, langchain, markdown, json
 
 Pipelines:
-  --sota: New 4-layer SOTA architecture (MinerU + LLM hierarchy repair + AST + dual-threshold DFS)
-  default: Legacy pipeline (PyMuPDF + simple chunking)
+  default: 4-layer architecture (MinerU + LLM hierarchy repair + AST + dual-threshold DFS)
+  --legacy: Legacy pipeline (PyMuPDF + simple chunking)
         """
     )
     
@@ -60,9 +60,9 @@ Pipelines:
     )
     
     parser.add_argument(
-        "--sota",
+        "--legacy",
         action="store_true",
-        help="Use new SOTA 4-layer pipeline (MinerU + LLM + AST + DFS)"
+        help="Use legacy PyMuPDF-based pipeline instead of default MinerU pipeline"
     )
     
     parser.add_argument(
@@ -86,32 +86,32 @@ Pipelines:
     parser.add_argument(
         "--soft-limit",
         type=int,
-        help="Soft limit for chunk size in tokens (SOTA pipeline only)"
+        help="Soft limit for chunk size in tokens (default pipeline only)"
     )
     
     parser.add_argument(
         "--hard-limit",
         type=int,
-        help="Hard limit for chunk size in tokens (SOTA pipeline only)"
+        help="Hard limit for chunk size in tokens (default pipeline only)"
     )
     
-    # Legacy pipeline options (deprecated - use SOTA pipeline instead)
+    # Legacy pipeline options
     parser.add_argument(
         "--max-chunk-size",
         type=int,
-        help="[DEPRECATED] Use --soft-limit with --sota instead"
+        help="Maximum chunk size in characters (legacy pipeline only)"
     )
     
     parser.add_argument(
         "--min-chunk-size",
         type=int,
-        help="[DEPRECATED] Legacy pipeline option only"
+        help="Minimum chunk size in characters (legacy pipeline only)"
     )
     
     parser.add_argument(
         "--overlap",
         type=int,
-        help="[DEPRECATED] Legacy pipeline option only"
+        help="Overlap size between chunks (legacy pipeline only)"
     )
     
     args = parser.parse_args()
@@ -139,17 +139,17 @@ Pipelines:
     if args.no_metadata:
         config.features.enable_metadata_injection = False
     
-    # SOTA pipeline options
+    # Default pipeline options
     if args.soft_limit:
         config.chunking.soft_limit = args.soft_limit
     
     if args.hard_limit:
         config.chunking.hard_limit = args.hard_limit
     
-    # Legacy pipeline options - warn if used with SOTA
-    if args.sota and (args.max_chunk_size or args.min_chunk_size or args.overlap):
-        print("Warning: --max-chunk-size, --min-chunk-size, and --overlap are deprecated with --sota")
-        print("         Use --soft-limit and --hard-limit instead")
+    # Legacy pipeline options - warn if used with default pipeline
+    if not args.legacy and (args.max_chunk_size or args.min_chunk_size or args.overlap):
+        print("Warning: --max-chunk-size, --min-chunk-size, and --overlap are only used with --legacy")
+        print("         Use --soft-limit and --hard-limit for the default pipeline")
         print()
     
     # Run pipeline
@@ -159,16 +159,16 @@ Pipelines:
         print("=" * 60)
         print()
         
-        if args.sota:
-            print("Using: SOTA 4-Layer Pipeline")
+        if args.legacy:
+            print("Using: Legacy Pipeline (PyMuPDF)")
+            print()
+            pipeline = Paper2ChunkLegacyPipeline(config)
+        else:
+            print("Using: 4-Layer Pipeline")
             print("  1. MinerU Visual Extraction")
             print("  2. LLM TOC Hierarchy Repair")
             print("  3. AST Construction")
             print("  4. Dual-Threshold DFS Chunking")
-            print()
-            pipeline = Paper2ChunkSOTAPipeline(config)
-        else:
-            print("Using: Legacy Pipeline")
             print()
             pipeline = Paper2ChunkPipeline(config)
         
