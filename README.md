@@ -1,2 +1,259 @@
-# paper2chunk
-Rewrite a PDF document into RAG-friendly chunks,Include evaluation methods and data
+# paper2chunk 📄➡️🧩
+
+> **将非结构化 PDF 转化为语义完整、结构清晰、元数据丰富的 RAG 友好分片**
+
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+paper2chunk 是一个专为 RAG（检索增强生成）系统设计的 PDF 文档处理工具。它的核心目标是解决 RAG 系统中的**"碎片化语义丢失"**问题，将非结构化的 PDF 转化为**语义完整、结构清晰、元数据丰富**的原子化分片（Chunks）。
+
+## 🎯 核心问题
+
+传统的文档切片方法（如按字符数、句子数切分）会导致：
+- ❌ 语义链条被切断
+- ❌ 上下文信息丢失
+- ❌ 代词引用不明确（"它"指的是什么？）
+- ❌ 时间、地点等关键信息缺失
+
+**paper2chunk 的解决方案：**
+- ✅ 基于文档自然结构切分（章节、段落）
+- ✅ LLM 语义增强（"它" → "**[动量因子]**"）
+- ✅ 自动注入元数据（标题、日期、章节层级）
+- ✅ 图表转文字描述（可选）
+- ✅ 提取实体和关键词
+
+## 🛠️ 核心功能
+
+### 1. 智能重写 (LLM-based Rewriting)
+利用 LLM 将 PDF 内容重写为结构化的 Markdown。
+
+**示例转换：**
+```
+原文: "它在2020年表现很好"
+↓
+增强: "**[动量因子]** 在 **[2020年]** 表现很好"
+```
+
+### 2. 语义分片 (Semantic Chunking)
+基于文档的天然结构（章节、段落）进行切分，**绝不切断逻辑链条**。
+
+- 尊重文档结构层级
+- 保持段落完整性
+- 可配置的重叠区域
+- 动态调整分片大小
+
+### 3. 元数据注入 (Context Injection)
+自动将文章标题、发布时间、章节层级"硬编码"进每一个分片，确保**分片独立存在时依然具有完整含义**。
+
+**元数据包括：**
+- 📄 文档标题
+- 📍 章节层级路径
+- 📅 发布日期
+- 📖 页码范围
+- 🔢 分片位置信息
+
+### 4. 图表叙事化 (Chart-to-Text)
+（可选）识别图表并生成详细的文字描述，让 RAG 能够"读懂"图片趋势。
+
+### 5. RAG 友好输出
+输出格式天然适配 **LightRAG (Graph RAG)** 和 **LangChain**，优化了实体抽取和关系构建。
+
+支持的输出格式：
+- `lightrag` - 为 LightRAG 优化的 JSON 格式
+- `langchain` - LangChain Document 格式
+- `markdown` - 带元数据的 Markdown 文档
+- `json` - 标准 JSON 格式
+
+## 📦 安装
+
+### 使用 pip 安装
+```bash
+pip install -e .
+```
+
+### 安装依赖
+```bash
+pip install -r requirements.txt
+```
+
+### 环境配置
+复制环境变量模板并配置：
+```bash
+cp .env.example .env
+# 编辑 .env 文件，添加你的 API 密钥
+```
+
+**必需配置：**
+```bash
+# OpenAI 配置（推荐）
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-4
+
+# 或 Anthropic 配置
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+ANTHROPIC_MODEL=claude-3-opus-20240229
+
+# 选择 LLM 提供商
+LLM_PROVIDER=openai  # 或 anthropic
+```
+
+## 🚀 快速开始
+
+### 命令行使用
+
+```bash
+# 基本用法
+paper2chunk input.pdf -o output.json
+
+# 指定输出格式
+paper2chunk input.pdf -o output.json --format lightrag
+
+# 输出为 Markdown
+paper2chunk input.pdf -o output.md --format markdown
+
+# 禁用 LLM 增强（更快，但语义丰富度降低）
+paper2chunk input.pdf -o output.json --no-enhancement
+
+# 自定义分片参数
+paper2chunk input.pdf -o output.json --max-chunk-size 1500 --overlap 100
+```
+
+### Python API 使用
+
+```python
+from paper2chunk import Paper2ChunkPipeline
+
+# 初始化管道
+pipeline = Paper2ChunkPipeline()
+
+# 处理 PDF
+document = pipeline.process("example.pdf")
+
+# 保存输出
+pipeline.save_output(document, "output.json", format="lightrag")
+
+# 访问分片数据
+for chunk in document.chunks:
+    print(f"Content: {chunk.content}")
+    print(f"Section: {chunk.metadata.section_hierarchy}")
+    print(f"Entities: {chunk.entities}")
+    print(f"Keywords: {chunk.keywords}")
+```
+
+### 自定义配置
+
+```python
+from paper2chunk import Paper2ChunkPipeline
+from paper2chunk.config import Config
+
+# 加载并自定义配置
+config = Config.from_env()
+config.chunking.max_chunk_size = 1500
+config.chunking.min_chunk_size = 200
+config.features.enable_chart_to_text = False
+
+# 使用自定义配置
+pipeline = Paper2ChunkPipeline(config)
+document = pipeline.process("example.pdf")
+```
+
+## 📊 输出示例
+
+### LightRAG 格式输出
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "content": "📄 **Document**: 量化投资研究报告\n📍 **Section**: 第三章 → 因子分析\n📅 **Date**: 2020-01-01\n📖 **Pages**: 15-17\n\n**[动量因子]** 在 **[2020年]** 表现很好，超额收益达到 **15%**...",
+  "metadata": {
+    "document_title": "量化投资研究报告",
+    "section_hierarchy": ["第三章", "因子分析"],
+    "page_numbers": [15, 16, 17],
+    "publish_date": "2020-01-01"
+  },
+  "entities": ["动量因子", "2020年", "超额收益"],
+  "keywords": ["量化投资", "因子分析", "动量", "收益"]
+}
+```
+
+### LangChain 格式输出
+
+```json
+{
+  "page_content": "📄 **Document**: 量化投资研究报告\n...",
+  "metadata": {
+    "source": "量化投资研究报告",
+    "chunk_id": "550e8400-e29b-41d4-a716-446655440000",
+    "section_hierarchy": "第三章 → 因子分析",
+    "page_numbers": [15, 16, 17],
+    "entities": ["动量因子", "2020年"],
+    "keywords": ["量化投资", "因子分析"]
+  }
+}
+```
+
+## 🏗️ 架构设计
+
+```
+PDF Input
+    ↓
+[PDFParser] ──→ 提取文本、结构、图片
+    ↓
+[SemanticChunker] ──→ 基于结构切分
+    ↓
+[MetadataInjector] ──→ 注入元数据
+    ↓
+[LLMRewriter] ──→ 语义增强（可选）
+    ↓
+[ChartAnalyzer] ──→ 图表分析（可选）
+    ↓
+[OutputFormatter] ──→ 输出格式化
+    ↓
+RAG-ready Chunks
+```
+
+## ⚙️ 配置选项
+
+### 分片配置
+- `max_chunk_size`: 最大分片大小（字符数），默认 1000
+- `min_chunk_size`: 最小分片大小（字符数），默认 100
+- `overlap_size`: 重叠区域大小（字符数），默认 50
+
+### 功能开关
+- `enable_semantic_enhancement`: 启用 LLM 语义增强，默认 true
+- `enable_chart_to_text`: 启用图表转文字，默认 true
+- `enable_metadata_injection`: 启用元数据注入，默认 true
+
+### LLM 配置
+- `provider`: LLM 提供商（openai 或 anthropic）
+- `openai_model`: OpenAI 模型名称，默认 gpt-4
+- `anthropic_model`: Anthropic 模型名称
+- `temperature`: 温度参数，默认 0.3
+
+## 🎓 使用场景
+
+1. **学术论文处理**：将复杂的学术论文转化为易于检索的知识片段
+2. **技术文档转换**：将技术文档转化为 RAG 系统可用的格式
+3. **金融报告分析**：处理金融研究报告，保留关键数据和上下文
+4. **法律文件处理**：保持法律文件的章节结构和引用关系
+5. **知识库构建**：为企业知识库系统准备高质量的文档片段
+
+## 🤝 贡献
+
+欢迎贡献代码、报告问题或提出新功能建议！
+
+## 📄 许可证
+
+MIT License - 详见 LICENSE 文件
+
+## 🙏 致谢
+
+感谢以下开源项目：
+- PyMuPDF - PDF 解析
+- OpenAI / Anthropic - LLM 支持
+- LangChain - RAG 框架
+- LightRAG - Graph RAG 实现
+
+---
+
+**Made with ❤️ for the RAG community**
