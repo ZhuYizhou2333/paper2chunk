@@ -8,6 +8,13 @@ import os
 load_dotenv()
 
 
+class MinerUConfig(BaseModel):
+    """MinerU API configuration"""
+    api_key: Optional[str] = Field(default=None, description="MinerU API key")
+    api_url: str = Field(default="https://api.mineru.cn/v1/parse", description="MinerU API URL")
+    timeout: int = Field(default=300, description="API timeout in seconds")
+
+
 class LLMConfig(BaseModel):
     """LLM configuration"""
     provider: str = Field(default="openai", description="LLM provider (openai or anthropic)")
@@ -21,9 +28,8 @@ class LLMConfig(BaseModel):
 
 class ChunkingConfig(BaseModel):
     """Chunking configuration"""
-    max_chunk_size: int = Field(default=1000, description="Maximum chunk size in characters")
-    min_chunk_size: int = Field(default=100, description="Minimum chunk size in characters")
-    overlap_size: int = Field(default=50, description="Overlap size between chunks")
+    soft_limit: int = Field(default=800, description="Optimal chunk size in tokens")
+    hard_limit: int = Field(default=2000, description="Maximum chunk size in tokens")
     preserve_structure: bool = Field(default=True, description="Preserve document structure")
 
 
@@ -36,6 +42,7 @@ class FeatureConfig(BaseModel):
 
 class Config(BaseModel):
     """Main configuration class"""
+    mineru: MinerUConfig = Field(default_factory=MinerUConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
     features: FeatureConfig = Field(default_factory=FeatureConfig)
@@ -43,18 +50,23 @@ class Config(BaseModel):
     @classmethod
     def from_env(cls) -> "Config":
         """Load configuration from environment variables"""
+        mineru_config = MinerUConfig(
+            api_key=os.getenv("MINERU_API_KEY"),
+            api_url=os.getenv("MINERU_API_URL", "https://api.mineru.cn/v1/parse"),
+            timeout=int(os.getenv("MINERU_TIMEOUT", "300")),
+        )
+        
         llm_config = LLMConfig(
             provider=os.getenv("LLM_PROVIDER", "openai"),
             openai_api_key=os.getenv("OPENAI_API_KEY"),
-            openai_model=os.getenv("OPENAI_MODEL", "gpt-4"),
+            openai_model=os.getenv("OPENAI_MODEL", "gpt-4o"),
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
             anthropic_model=os.getenv("ANTHROPIC_MODEL", "claude-3-opus-20240229"),
         )
         
         chunking_config = ChunkingConfig(
-            max_chunk_size=int(os.getenv("MAX_CHUNK_SIZE", "1000")),
-            min_chunk_size=int(os.getenv("MIN_CHUNK_SIZE", "100")),
-            overlap_size=int(os.getenv("OVERLAP_SIZE", "50")),
+            soft_limit=int(os.getenv("CHUNK_SOFT_LIMIT", "800")),
+            hard_limit=int(os.getenv("CHUNK_HARD_LIMIT", "2000")),
         )
         
         features_config = FeatureConfig(
@@ -63,6 +75,7 @@ class Config(BaseModel):
         )
         
         return cls(
+            mineru=mineru_config,
             llm=llm_config,
             chunking=chunking_config,
             features=features_config,
